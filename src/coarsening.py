@@ -113,7 +113,7 @@ def metis(W, levels, rid=None):
         # scipy adds the values of the duplicate entries:  merge weights of cluster
         # W 的 index 代表new cluster 的 id
         W = scipy.sparse.csr_matrix((nvv,(nrr,ncc)), shape=(Nnew,Nnew))
-        W.eliminate_zeros()
+        W.eliminate_zeros() # 稀疏
         # Add new graph to the list of all coarsened graphs
         graphs.append(W)
         N, N = W.shape
@@ -246,8 +246,10 @@ assert (compute_perm([np.array([4,1,1,2,2,3,0,0,3]),np.array([2,1,0,1,0])])
 
 def perm_data(x, indices):
     """
+    排列成待卷积的序列
     Permute data matrix, i.e. exchange node ids,
     so that binary unions form the clustering tree.
+    new x can be used for pooling
     """
     if indices is None:
         return x
@@ -272,6 +274,7 @@ def perm_adjacency(A, indices):
     indices 是为了组成使最顶层id为升序的二叉树，本层的id的顺序
     Permute adjacency matrix, i.e. exchange node ids,
     so that binary unions form the clustering tree.
+    new A can be used to following convolution and pooling
     """
     if indices is None:
         return A
@@ -306,3 +309,57 @@ def perm_adjacency(A, indices):
     # assert np.abs(A - A.T).mean() < 1e-9
     assert type(A) is scipy.sparse.coo.coo_matrix
     return A
+
+
+def adj_to_A(adj):
+    '''
+    in np ,used at beginging for once
+    :param adj: num_points, K
+    :return:
+    '''
+    num_points, K=adj.shape
+    idx=np.arange(num_points)
+    idx = np.reshape(idx, [-1, 1])    # Convert to a n x 1 matrix.
+    idx = np.tile(idx, [1, K])  # Create multiple columns, each column has one number repeats repTime
+    x = np.reshape(idx, [-1]) # 0000  1111 2222 3333 4444 从0开始
+    y =np.reshape(adj, [-1]) # 3200  1300 1200 ...  e.g. 一个环  从1开始
+    v= (y!=0).astype(np.float32) # 1100 1100 1100
+    y=y-1  # 1200  0200 0100 ...  e.g. 一个环  从0开始
+    A = scipy.sparse.coo_matrix((v, (x, y)), shape=(num_points, num_points))
+    # A=A.tocsr() # TODO needed or ?
+    A.setdiag(0)
+    return A
+
+
+def A_to_adj(num_points,K,A):
+    '''
+    in np, used after each time of coarsening when new A is created
+    in coarsen, A id is begin from 0, while in conv, adj id is begin from 1
+    :return: num_points, K
+    '''
+    idx_row, idx_col, val = scipy.sparse.find(A)
+    pair_num=idx_row.shape[0]
+    perm = np.argsort(idx_row)
+    rr = idx_row[perm]
+    cc = idx_col[perm]
+    adj = np.zeros([num_points,K], np.int32)
+    cur_row = rr[0]
+    cur_col=0
+    col_count=0
+    for i in range(pair_num):
+        row=rr[i]
+        col=cc[i]
+        if row>cur_row:
+            adj[cur_row,cur_col:]=0
+            col_count+=cur_col
+            cur_row=row
+            cur_col=0
+        
+        adj[row,cur_col]=col+1
+        cur_col+=1
+    return adj
+
+
+    
+
+    

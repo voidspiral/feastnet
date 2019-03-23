@@ -204,18 +204,8 @@ def custom_conv2d(x, adj, out_channels, M, translation_invariance=False):
 def custom_pool():
 
 
-def adj_matrix():
-    '''
-    in np
-    :return:
-    '''
-    
-def m_to_adj():
-    '''
-    in np
-    :return:
-    '''
-    
+
+
     
     
 def custom_lin(input, out_channels):
