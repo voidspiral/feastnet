@@ -111,7 +111,7 @@ def metis(W, levels, rid=None):
         # 有层间父子id映射 claster_id，和父层的拓扑关系 W, W中 weight越大表示节点连接关系的越强，能够
         # 指导下一次cluster
         # scipy adds the values of the duplicate entries:  merge weights of cluster
-        # W 的 index 代表cluster生成的先后顺序
+        # W 的 index 代表new cluster 的 id
         W = scipy.sparse.csr_matrix((nvv,(nrr,ncc)), shape=(Nnew,Nnew))
         W.eliminate_zeros()
         # Add new graph to the list of all coarsened graphs
@@ -198,13 +198,14 @@ def compute_perm(parents):
     if len(parents) > 0:
         M_last = max(parents[-1]) + 1
         indices.append(list(range(M_last))) # rank the cluster id of the last layer
-        #只有最后一层需要排序
+        #只有最后一层需要排序 indices=[0,1,2]
 
     for parent in parents[::-1]:
         # from the coarsest level
         #print('parent: {}'.format(parent))
 
-        # Fake nodes go after real ones. 这样 finer layer 查找的时候就不会找到，就会添加2个fake nodes
+        # Fake nodes go after real ones. len(parent) is the number of real node in this layer
+        # add new id for fake nodes of this layer
         pool_singeltons = len(parent)
 
         indices_layer = []
@@ -276,7 +277,7 @@ def perm_adjacency(A, indices):
         return A
 
     M, M = A.shape
-    # 45 03 21    if 3 is fake, M=5
+    # 45 03 21    if 345 is fake, M=3
     # 0  1  2
     # indices is one of the above two lines
     Mnew = len(indices)
@@ -291,10 +292,14 @@ def perm_adjacency(A, indices):
         A = scipy.sparse.hstack([A, cols])
 
     # Permute the rows and the columns.
-    # e.g. 254301
+    # e.g. 254|301
     #      012
     perm = np.argsort(indices)
-    # row,col= M.nonzero() 两个array表示非零值的索引，按照row由小到大排序， 相当于 sparse.find(W)+排序
+    # row,col= M.nonzero() 两个array表示非零值的索引，按照row由小到大排序，
+    # 相当于 sparse.find(W)+排序
+    # 卷积要用到并行，需要将原id按 450321 排列，如下操作
+    # e.g. 把id 为0的点从矩阵的 index 0 处移动到 index 2处,这是对adj的操作，
+    # 还应该有对x的对应交换操作。交换完成后可以进行 两两 max 的 pooling 操作
     A.row = np.array(perm)[A.row]
     A.col = np.array(perm)[A.col]
 
