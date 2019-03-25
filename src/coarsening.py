@@ -2,7 +2,7 @@ import numpy as np
 import scipy.sparse
 
 
-def coarsen(A, levels, self_connections=False):
+def coarsen(A,x, levels, self_connections=False):
     """
     Coarsen a graph, represented by its adjacency matrix A, at multiple
     levels.
@@ -13,26 +13,17 @@ def coarsen(A, levels, self_connections=False):
     # 根据最顶层id升序，返回自底向上的id二叉树，二叉树的结构定义了层间连接关系
     # perm 和 graph 数量相等，比parent多一个
     perms = compute_perm(parents)
+    xnew=perm_data(x, perms[0])
+    Anew=graphs[-1]
+    if not self_connections:
+        Anew = Anew.tocoo()
+        Anew.setdiag(0)
 
-    for i, A in enumerate(graphs):# 细到粗
-        M, M = A.shape
+    Anew=perm_adjacency(Anew, perms[-1])
+    Anew = Anew.tocsr()
+    Anew.eliminate_zeros()
 
-        if not self_connections:
-            A = A.tocoo()
-            A.setdiag(0)
-
-        if i < levels:
-            A = perm_adjacency(A, perms[i])
-
-        A = A.tocsr()
-        A.eliminate_zeros()
-        graphs[i] = A
-
-        Mnew, Mnew = A.shape
-        print('Layer {0}: M_{0} = |V| = {1} nodes ({2} added),'
-              '|E| = {3} edges'.format(i, Mnew, Mnew-M, A.nnz//2))
-
-    return graphs, perms[0] if levels > 0 else None
+    return perms[0], Anew
 
 
 def metis(W, levels, rid=None):
@@ -325,9 +316,10 @@ def adj_to_A(adj):
     y =np.reshape(adj, [-1]) # 3200  1300 1200 ...  e.g. 一个环  从1开始
     v= (y!=0).astype(np.float32) # 1100 1100 1100
     y=y-1  # 1200  0200 0100 ...  e.g. 一个环  从0开始
-    A = scipy.sparse.coo_matrix((v, (x, y)), shape=(num_points, num_points))
-    # A=A.tocsr() # TODO needed or ?
-    A.setdiag(0)
+    A = scipy.sparse.csr_matrix((v, (x, y)), shape=(num_points, num_points))
+    # A=A.tocsr()
+    # A.setdiag(0)
+    A.eliminate_zeros()  # 稀疏
     return A
 
 

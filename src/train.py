@@ -9,7 +9,7 @@ import time
 import h5py
 import argparse
 
-from src.coarsening import adj_to_A
+from src.coarsening import adj_to_A, coarsen, A_to_adj
 from src.data_process import get_training_data
 from src.model import *
 from src.utils import *
@@ -39,13 +39,12 @@ NUM_INPUT_CHANNELS = FLAGS.num_input_channels
 LEARNING_RATE = FLAGS.learning_rate
 NUM_POINTS = FLAGS.num_points
 NUM_CLASSES = FLAGS.num_classes
-BATCH_SIZE=16
-IN_CHANNELS=3
-K=4
+BATCH_SIZE = 16
+IN_CHANNELS = 3
+K = 4
 
 if not os.path.exists(RESULTS_PATH):
-		os.makedirs(RESULTS_PATH)
-
+    os.makedirs(RESULTS_PATH)
 
 """
 Load dataset 
@@ -55,53 +54,64 @@ adj (adj_input) of size [batch_size, num_points, K] : This is a list of indices 
 										  e.g. [16,10,4] 16 batch, 10 vertice with 4 neib for each
 """
 
-x1 = tf.placeholder(tf.float32, shape=[BATCH_SIZE, NUM_POINTS, IN_CHANNELS])
-x2 = tf.placeholder(tf.float32, shape=[BATCH_SIZE, NUM_POINTS, IN_CHANNELS])
+x = tf.placeholder(tf.float32, shape=[BATCH_SIZE, NUM_POINTS, IN_CHANNELS])
+adj0 = tf.placeholder(tf.int32, shape=[BATCH_SIZE, NUM_POINTS, K])
 adj1 = tf.placeholder(tf.int32, shape=[BATCH_SIZE, NUM_POINTS, K])
-adj2 = tf.placeholder(tf.int32, shape=[BATCH_SIZE, NUM_POINTS, K])
-
+perm0 = tf.placeholder(tf.int32, shape=[None])
 
 y = tf.placeholder(tf.float32, shape=[BATCH_SIZE, NUM_POINTS, NUM_CLASSES])
 # conv2.shape:  [batch_size, input_size, out_channel]
-conv2,y_conv = get_model([x1,x2], [adj1,adj2], NUM_CLASSES, ARCHITECTURE)
-
-
-
+output = get_model(x, [adj0, adj1], [perm0], NUM_CLASSES, ARCHITECTURE)
 
 batch = tf.Variable(0, trainable=False)
 
 # Standard classification loss
-cross_entropy = tf.reduce_mean(tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels=y, logits=y_conv), axis=1))
+# cross_entropy = tf.reduce_mean(tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels=y, logits=y_conv), axis=1))
+cross_entropy = tf.reduce_mean(tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(labels=y, logits=output), axis=1))
 
 train_step = tf.train.AdamOptimizer(LEARNING_RATE).minimize(cross_entropy, global_step=batch)
-correct_prediction = tf.equal(tf.argmax(y_conv,2), tf.argmax(y,2))
-predictions = tf.argmax(y_conv, 2)
-accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
+
 saver = tf.train.Saver()
 sess.run(tf.global_variables_initializer())
 
 ckpt = tf.train.get_checkpoint_state(os.path.dirname(RESULTS_PATH))
 if ckpt and ckpt.model_checkpoint_path:
-		saver.restore(sess, ckpt.model_checkpoint_path)
-		print("Checkpoint restored\n")
+    saver.restore(sess, ckpt.model_checkpoint_path)
+    print("Checkpoint restored\n")
 
 # Train for the dataset
 
-#[]
-input,train_adj, label = get_training_data('')
-case_nam=input.shape[0]
-for iter in range(NUM_ITERATIONS):
-	for i in range(case_nam):
-		conv2_np=sess.run(conv2,feed_dict={
-			x1: input[i], adj1: train_adj[i], y: label[i]
-		})
-		A_np=adj_to_A(train_adj[i])
-		
-	
-		
-	i = train_shuffle[iter%(len(train_data))]
-	input = train_data[i]
-	if iter%1000 == 0:
-		train_accuracy = accuracy.eval(feed_dict={x:input, adj:adj_input, y_: label})
-	train_step.run(feed_dict={x:input, adj:train_adj, y_: label})
+# []
+x_train, adj_train, y_train = get_training_data('')
+x_valid, adj_valid, y_valid = get_training_data('')
+case_num = x_train.shape[0]
+perm = np.arange(case_num)
 
+for iter in range(NUM_ITERATIONS):
+    for i in range(case_num):
+        A_0 = adj_to_A(adj_train[i])
+        perm_0,A_1=coarsen(A_0, x_train[i], 2)
+        adj_1=A_to_adj(NUM_POINTS,K,A_1)
+        _,loss_train = sess.run([train_step,cross_entropy], feed_dict={
+            x: x_train[i],
+            adj0: adj_train[i],
+            adj1:adj_1,
+            perm0:perm_0,
+            y: y_train[i]})
+        
+    np.random.shuffle(perm)  # 打乱
+    x_train = x_train[perm]
+    adj_train = adj_train[perm]
+    y_train = y_train[perm]
+
+    if iter % 1000 == 0:
+        A_0 = adj_to_A(adj_valid[0])
+        perm_0,A_1=coarsen(A_0, x_valid[0], 2)
+        adj_1=A_to_adj(NUM_POINTS,K,A_1)
+
+        loss_train = sess.run([cross_entropy], feed_dict={
+            x: x_valid[0],
+            adj0: adj_valid[0],
+            adj1:adj_1,
+            perm0:perm_0,
+            y: y_valid[0]})

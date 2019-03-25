@@ -201,7 +201,6 @@ def custom_conv2d(x, adj, out_channels, M, translation_invariance=False):
         # conv end
         return patches
 
-def custom_pool():
 
 
 
@@ -221,7 +220,28 @@ def custom_max_pool(input, kernel_size, stride=[2, 2], padding='VALID'):
     outputs = tf.nn.max_pool(input, ksize=[1, kernel_h, kernel_w, 1], strides=[1, stride_h, stride_w, 1], padding=padding)
     return outputs
 
-def get_model(x, adj, num_classes, architecture):
+def perm_data(input, indices):
+    """
+    排列成待卷积的序列
+    Permute data matrix, i.e. exchange node ids,
+    so that binary unions form the clustering tree.
+    new x can be used for pooling
+    """
+
+    M,channel = input.shape
+    Mnew = indices.shape[0]
+    
+    xnew = tf.zeros((Mnew,channel))
+    def loop_body(i):
+        if i<M:
+            xnew[i] = input[indices[i]]
+
+    xnew = tf.while_loop(lambda i, *args: i < Mnew, loop_body,[xnew])
+    return xnew
+
+
+
+def get_model(x, adj, perms, num_classes, architecture):
     """
     0 - input(3) - LIN(16) - CONV(32) - CONV(64) - CONV(128) - LIN(1024) - Output(50)
     """
@@ -236,18 +256,16 @@ def get_model(x, adj, num_classes, architecture):
     out_channels_conv2 = 64
     # [batch_size, input_size, out]
     conv2 = tf.nn.relu(custom_conv2d(conv1, adj[0], out_channels_conv2, M_conv2))
-    
-    
-    
+    conv2=perm_data(conv2,perms[0])
     
     # Conv3
     M_conv3 = 9
     out_channels_conv3 = 128
-    h_conv3 = tf.nn.relu(custom_conv2d(x[1], adj[1], out_channels_conv3, M_conv3))
+    conv3 = tf.nn.relu(custom_conv2d(conv2, adj[1], out_channels_conv3, M_conv3))
     # Lin(1024)
     out_channels_fc1 = 1024
-    h_fc1 = tf.nn.relu(custom_lin(h_conv3, out_channels_fc1))
+    fc1 = tf.nn.relu(custom_lin(conv3, out_channels_fc1))
     # Lin(num_classes)
-    y_conv = custom_lin(h_fc1, num_classes)
-    return conv2,y_conv
+    y = custom_lin(fc1, num_classes)
+    return y
 
