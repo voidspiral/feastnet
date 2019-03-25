@@ -190,7 +190,7 @@ def compute_perm(parents):
     """
     Return a list of indices to reorder the adjacency and data matrices so
     that the union of two neighbors from layer to layer forms a binary tree.
-    产生重新排列的索引向量
+    产生底层根据顶层排序，并加入fake_nodes后的排序，最底层会用于构建二叉树
     """
 
     # Order of last layer is random (chosen by the clustering algorithm).
@@ -254,19 +254,19 @@ def perm_data(x, indices):
     if indices is None:
         return x
 
-    N, M = x.shape
+    M,channel = x.shape
     Mnew = len(indices)
     assert Mnew >= M
-    xnew = np.empty((N, Mnew))
+    xnew = np.empty((Mnew,channel))
     for i,j in enumerate(indices):
         # Existing vertex, i.e. real data.
         if j < M:
-            xnew[:,i] = x[:,j]
+            xnew[i] = x[j]
         # Fake vertex because of singeltons.
         # They will stay 0 so that max pooling chooses the singelton.
         # Or -infty ?
         else:
-            xnew[:,i] = np.zeros(N)
+            xnew[i] = np.zeros(channel)
     return xnew
 
 def perm_adjacency(A, indices):
