@@ -66,7 +66,7 @@ def get_weight_assigments_translation_invariance(x, adj, u, c):
     batch_size, num_points, in_channels = x.get_shape().as_list()
     batch_size, num_points, K = adj.get_shape().as_list()
     M, in_channels = u.get_shape().as_list()
-    # [batch, N, K, ch]
+    # [batch, N, K, ch]  [batch_size, num_points, K, in_channels]
     patches = get_patches(x, adj)
     # [batch, N, ch, 1]
     x = tf.reshape(x, [-1, num_points, in_channels, 1])
@@ -104,16 +104,69 @@ def get_patches(x, adj):
     zeros = tf.zeros([batch_size, 1, in_channels], dtype=tf.float32)
     # 索引为0的邻接点，会索引到 0,0,0
     x = tf.concat([zeros, x], 1)
+    x = tf.reshape(x, [batch_size*(num_points+1), in_channels])
+    adj = tf.reshape(adj, [batch_size*num_points*K])
+    adj_flat = tile_repeat(batch_size, num_points*K)
+    adj_flat = adj_flat*(num_points+1)
+    adj_flat = adj_flat + adj
+    #[batch_size*num_points, K]
+    adj_flat = tf.reshape(adj_flat, [batch_size*num_points, K])
+    # gather 只是在 x axis=0 上索引，并放入到 index 形状中。output 的前几维的形状由 index 决定，
+    # 剩下的由input的后 n-1维决定
+    patches = tf.gather(x, adj_flat) #[batch_size*num_points,K,in_channels]
+    patches = tf.reshape(patches, [batch_size, num_points, K, in_channels])
+    return patches
+
+
+def get_patches_2(x, adj):
+    '''
+    获得 x 的adj patch
+    :param x: batch_size, num_points, in_channels
+    :param adj: batch_size, num_points, K
+    :return:
+    '''
+    batch_size, num_points, in_channels = x.get_shape().as_list()
+    batch_size, input_size, K = adj.get_shape().as_list()
+    zeros = tf.zeros([batch_size, 1, in_channels], dtype=tf.float32)
+    # 索引为0的邻接点，会索引到 0,0,0
+    x = tf.concat([zeros, x], 1)
     x = tf.reshape(x, [batch_size * (num_points + 1), in_channels])
     adj = tf.reshape(adj, [batch_size * num_points * K])
     adj_flat = tile_repeat(batch_size, num_points * K)
     adj_flat = adj_flat * (num_points + 1)
     adj_flat = adj_flat + adj
+    # [batch_size*num_points, K]
     adj_flat = tf.reshape(adj_flat, [batch_size * num_points, K])
+    
+    ############### 2-ring
+    zeros_adj = tf.zeros([batch_size, 1, K], dtype=tf.int32)
+    adj = tf.concat([zeros_adj, adj], 1)  # [batch_size , num_points+1 , K]
+    adj = tf.reshape(adj, [batch_size * (num_points + 1), K])
+    
+    patches_adj = tf.gather(adj, adj_flat)  # [batch_size*num_points,K,K]
+    K2=K*K
+    patches_adj = tf.reshape(patches_adj, [batch_size * num_points, K2])
+    
+    def cut_nodes(x):
+        y, idx = tf.unique(x)
+        paddings = tf.constant([0, K2 - tf.shape(y)])
+        y = tf.pad(y, paddings)
+        return y
+    
+    # [batch_size*num_points,K2]
+    adj_2 = tf.map_fn(lambda x: cut_nodes(x), patches_adj)
+
+    adj_2 = tf.reshape(adj_2, [batch_size * num_points * K2])
+    adj_flat = tile_repeat(batch_size, num_points * K2)
+    adj_flat = adj_flat * (num_points + 1)
+    adj_flat = adj_flat + adj_2
+    # [batch_size*num_points, K]
+    adj_flat = tf.reshape(adj_flat, [batch_size * num_points, K2])
     # gather 只是在 x axis=0 上索引，并放入到 index 形状中。output 的前几维的形状由 index 决定，
-    # 剩下的由input的后 n-1维决定。 所以slices.shape=[batch_size*num_points,K,in_channels]
-    patches = tf.gather(x, adj_flat)
-    patches = tf.reshape(patches, [batch_size, num_points, K, in_channels])
+    # 剩下的由input的后 n-1维决定
+    patches = tf.gather(x, adj_flat)  # [batch_size*num_points,K,in_channels]
+    patches = tf.reshape(patches, [batch_size, num_points, K2, in_channels])
+
     return patches
 
 
@@ -185,6 +238,7 @@ def custom_conv2d(x, adj, out_channels, M, translation_invariance=False):
         # Reshape and transpose wx into [batch_size, input_size, M*out_channels]
         wx = tf.transpose(wx, [0, 2, 1])
         # Get patches from wx - [batch_size, input_size, K, M*out_channels]
+        # adj中k为0的索引取到的 wx 也为0
         patches = get_patches(wx, adj)  # 索引
         # [batch_size, input_size, K, M]
         # q = get_weight_assigments_translation_invariance(x, adj, u, c)
@@ -196,6 +250,7 @@ def custom_conv2d(x, adj, out_channels, M, translation_invariance=False):
         # [batch_size, input_size, K, M, out]
         patches = tf.transpose(patches, [1, 2, 3, 4, 0])
         # Add all the elements for all neighbours for a particular m sum_{j in N_i} qwx -- [batch_size, input_size, M, out]
+        # sum data in index K is zero, so need 归一化
         patches = tf.reduce_sum(patches, axis=2)  # [batch_size, input_size, M, out]
         patches = tf.multiply(adj_size, patches)  # /Ni
         # Add add elements for all m
@@ -231,7 +286,7 @@ def perm_data(input, indices):
     """
     
     M, channel = input.shape
-    Mnew = indices.shape[0]
+    Mnew = tf.shape(indices)[0]
     
     xnew = tf.zeros((Mnew, channel))
     
@@ -243,31 +298,30 @@ def perm_data(input, indices):
     return xnew
 
 
-def get_model0(x, adj, num_classes, architecture):
+def get_model0(x, adj, num_classes):
     """
     0 - input(3) - LIN(16) - CONV(32) - CONV(64) - CONV(128) - LIN(1024) - Output(50)
     """
-    if architecture == 0:
-        out_channels_fc0 = 16
-        h_fc0 = tf.nn.relu(custom_lin(x, out_channels_fc0))
-        # Conv1
-        M_conv1 = 9
-        out_channels_conv1 = 32
-        h_conv1 = tf.nn.relu(custom_conv2d(h_fc0, adj, out_channels_conv1, M_conv1))
-        # Conv2
-        M_conv2 = 9
-        out_channels_conv2 = 64
-        h_conv2 = tf.nn.relu(custom_conv2d(h_conv1, adj, out_channels_conv2, M_conv2))
-        # Conv3
-        M_conv3 = 9
-        out_channels_conv3 = 128
-        h_conv3 = tf.nn.relu(custom_conv2d(h_conv2, adj, out_channels_conv3, M_conv3))
-        # Lin(1024)
-        out_channels_fc1 = 1024
-        h_fc1 = tf.nn.relu(custom_lin(h_conv3, out_channels_fc1))
-        # Lin(num_classes)
-        y_conv = custom_lin(h_fc1, num_classes)
-        return y_conv
+    out_channels_fc0 = 16
+    h_fc0 = tf.nn.relu(custom_lin(x, out_channels_fc0))
+    # Conv1
+    M_conv1 = 9
+    out_channels_conv1 = 32
+    h_conv1 = tf.nn.relu(custom_conv2d(h_fc0, adj, out_channels_conv1, M_conv1))
+    # Conv2
+    M_conv2 = 9
+    out_channels_conv2 = 64
+    h_conv2 = tf.nn.relu(custom_conv2d(h_conv1, adj, out_channels_conv2, M_conv2))
+    # Conv3
+    M_conv3 = 9
+    out_channels_conv3 = 128
+    h_conv3 = tf.nn.relu(custom_conv2d(h_conv2, adj, out_channels_conv3, M_conv3))
+    # Lin(1024)
+    out_channels_fc1 = 1024
+    h_fc1 = tf.nn.relu(custom_lin(h_conv3, out_channels_fc1))
+    # Lin(num_classes)
+    y_conv = custom_lin(h_fc1, num_classes)
+    return y_conv
 
 
 def get_model(x, adj, perms, num_classes, architecture):
