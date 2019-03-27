@@ -42,6 +42,7 @@ NUM_CLASSES = FLAGS.num_classes
 BATCH_SIZE = 16
 IN_CHANNELS = 3
 K = 4
+COARSEN_LEVEL=2
 
 if not os.path.exists(RESULTS_PATH):
     os.makedirs(RESULTS_PATH)
@@ -90,7 +91,7 @@ perm = np.arange(case_num)
 for iter in range(NUM_ITERATIONS):
     for i in range(case_num):
         A_0 = adj_to_A(adj_train[i])
-        perm_0,A_1=coarsen(A_0, x_train[i], 2)
+        perm_0,A_1=coarsen(A_0, x_train[i], COARSEN_LEVEL)
         adj_1=A_to_adj(NUM_POINTS,K,A_1)
         _,loss_train = sess.run([train_step,cross_entropy], feed_dict={
             x: x_train[i],
@@ -106,7 +107,7 @@ for iter in range(NUM_ITERATIONS):
 
     if iter % 1000 == 0:
         A_0 = adj_to_A(adj_valid[0])
-        perm_0,A_1=coarsen(A_0, x_valid[0], 2)
+        perm_0,A_1=coarsen(A_0, x_valid[0], COARSEN_LEVEL)
         adj_1=A_to_adj(NUM_POINTS,K,A_1)
 
         loss_train = sess.run([cross_entropy], feed_dict={
