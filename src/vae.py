@@ -11,6 +11,8 @@ from matplotlib import pyplot as plt
 from imageio import imwrite
 from tensorflow.contrib.learn.python.learn.datasets.mnist import read_data_sets
 
+from src.model import custom_lin, custom_conv2d
+
 sns.set_style('whitegrid')
 
 distributions = tf.distributions
@@ -38,7 +40,7 @@ flags.DEFINE_integer('n_iterations', 100000, 'number of iterations')
 FLAGS = flags.FLAGS
 
 
-def inference_network(x, latent_dim, hidden_size):
+def inference_network(x, adj,latent_dim, is_training, hidden_size):
   """Construct an inference network parametrizing a Gaussian.
   Args:
     x: A batch of MNIST digits.
@@ -49,9 +51,20 @@ def inference_network(x, latent_dim, hidden_size):
     sigma: Standard deviation parameters for the variational family Normal
   """
   with slim.arg_scope([slim.fully_connected], activation_fn=tf.nn.relu):
-    net = slim.flatten(x)
-    net = slim.fully_connected(net, hidden_size)
-    net = slim.fully_connected(net, hidden_size)
+    # batch_size, input_size, out_channels
+    h_fc0 = tf.nn.relu(custom_lin(x, 16))
+    # Conv1
+    M_conv1 = 9
+    # [batch_size, input_size, out]
+    h_conv1 = tf.nn.relu(custom_conv2d(h_fc0, adj, 32, M_conv1,))
+    # Conv2
+    M_conv2 = 9
+    h_conv2 = tf.nn.relu(custom_conv2d(h_conv1, adj, 64, M_conv2))
+    # Conv3
+    M_conv3 = 9
+    h_conv3 = tf.nn.relu(custom_conv2d(h_conv2, adj, 128, M_conv3))
+    # Lin(1024)
+    h_fc1 = tf.nn.relu(custom_lin(h_conv3, 1024))
     gaussian_params = slim.fully_connected(
         net, latent_dim * 2, activation_fn=None)
   # The mean parameter is unconstrained
