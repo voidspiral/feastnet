@@ -30,7 +30,9 @@ flags.DEFINE_string('logdir', '/tmp/log/', 'Directory for logs')
 # flags.DEFINE_integer('n_iterations', 1000, 'number of iterations')
 
 # For bigger model:
-flags.DEFINE_integer('latent_dim', 100, 'Latent dimensionality of model')
+flags.DEFINE_integer('latent_dim', 128, 'Latent dimensionality of model')
+flags.DEFINE_integer('num_points', 100, 'Latent dimensionality of model')
+flags.DEFINE_integer('num_k', 10, 'Latent dimensionality of model')
 flags.DEFINE_integer('batch_size', 64, 'Minibatch size')
 flags.DEFINE_integer('n_samples', 1, 'Number of samples to save')
 flags.DEFINE_integer('print_every', 1000, 'Print every n iterations')
@@ -40,7 +42,7 @@ flags.DEFINE_integer('n_iterations', 100000, 'number of iterations')
 FLAGS = flags.FLAGS
 
 
-def inference_network(x, adj,latent_dim, is_training, hidden_size):
+def inference_network(x, adj,latent_dim, is_training):
   """Construct an inference network parametrizing a Gaussian.
   Args:
     x: A batch of MNIST digits.
@@ -52,21 +54,20 @@ def inference_network(x, adj,latent_dim, is_training, hidden_size):
   """
   with slim.arg_scope([slim.fully_connected], activation_fn=tf.nn.relu):
     # batch_size, input_size, out_channels
-    h_fc0 = tf.nn.relu(custom_lin(x, 16))
+    h_fc0 = tf.nn.relu(custom_lin(x, 16,is_training))
     # Conv1
     M_conv1 = 9
     # [batch_size, input_size, out]
-    h_conv1 = tf.nn.relu(custom_conv2d(h_fc0, adj, 32, M_conv1,))
+    h_conv1 = tf.nn.relu(custom_conv2d(h_fc0, adj, 32, M_conv1,True,is_training))
     # Conv2
     M_conv2 = 9
-    h_conv2 = tf.nn.relu(custom_conv2d(h_conv1, adj, 64, M_conv2))
+    h_conv2 = tf.nn.relu(custom_conv2d(h_conv1, adj, 64, M_conv2,True,is_training))
     # Conv3
     M_conv3 = 9
-    h_conv3 = tf.nn.relu(custom_conv2d(h_conv2, adj, 128, M_conv3))
-    # Lin(1024)
-    h_fc1 = tf.nn.relu(custom_lin(h_conv3, 1024))
+    h_conv3 = tf.nn.relu(custom_conv2d(h_conv2, adj, 128, M_conv3,False))
+    mean_pool=tf.reduce_mean(h_conv3,axis=2)
     gaussian_params = slim.fully_connected(
-        net, latent_dim * 2, activation_fn=None)
+      mean_pool, latent_dim * 2, activation_fn=None)
   # The mean parameter is unconstrained
   mu = gaussian_params[:, :latent_dim]
   # The standard deviation must be positive. Parametrize with a softplus
@@ -74,16 +75,18 @@ def inference_network(x, adj,latent_dim, is_training, hidden_size):
   return mu, sigma
 
 
-def generative_network(z, hidden_size):
+def generative_network(z, num_points):
   """Build a generative network parametrizing the likelihood of the data
   Args:
-    z: Samples of latent variables
+    z: Samples of latent variables [batch_size,latent_dim]
     hidden_size: Size of the hidden state of the neural net
   Returns:
     bernoulli_logits: logits for the Bernoulli likelihood of the data
   """
   with slim.arg_scope([slim.fully_connected], activation_fn=tf.nn.relu):
-    net = slim.fully_connected(z, hidden_size)
+    net=tf.expand_dims(z,-1) #[batch_size,latent_dim,1]
+    net = slim.fully_connected(net, num_points) #[batch_size,latent_dim,num_points]
+    net=tf.transpose(net,[0,2,1]) #[batch_size,num_points,latent_dim]
     net = slim.fully_connected(net, hidden_size)
     bernoulli_logits = slim.fully_connected(net, 784, activation_fn=None)
     bernoulli_logits = tf.reshape(bernoulli_logits, [-1, 28, 28, 1])
@@ -95,15 +98,21 @@ def train():
 
   # Input placeholders
   with tf.name_scope('data'):
-    x = tf.placeholder(tf.float32, [None, 28, 28, 1])
+    x = tf.placeholder(tf.float32, [None, FLAGS.num_points,3])
+    adj = tf.placeholder(tf.int32, shape=[None, FLAGS.num_points, FLAGS.num_k])
+    is_training=tf.placeholder(tf.bool)
     tf.summary.image('data', x)
+    
 
   with tf.variable_scope('variational'):
+    # [batch_size,latent_dim] [batch_size,latent_dim]
     q_mu, q_sigma = inference_network(x=x,
+                                      adj=adj,
                                       latent_dim=FLAGS.latent_dim,
-                                      hidden_size=FLAGS.hidden_size)
+                                      is_training=is_training)
     # The variational distribution is a Normal with mean and standard
     # deviation given by the inference network
+    # [batch_size,latent_dim]
     q_z = distributions.Normal(loc=q_mu, scale=q_sigma)
     assert q_z.reparameterization_type == distributions.FULLY_REPARAMETERIZED
 

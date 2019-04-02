@@ -171,7 +171,7 @@ def get_patches_2(x, adj):
     return patches
 
 
-def custom_conv2d(x, adj, out_channels, M, BN_needed, is_training=None,translation_invariance=False):
+def custom_conv2d(x, adj, out_channels, M, BN_needed=True, is_training=None,translation_invariance=False):
     if translation_invariance == True:
         print("Translation-invariant\n")
         batch_size, input_size, in_channels = x.get_shape().as_list()
@@ -304,11 +304,38 @@ def perm_data(input, indices):
     return xnew
 
 
-def get_model0(x, adj, num_classes):
+def get_model(x, adj,is_training):
     """
     x = tf.placeholder(tf.float32, shape=[BATCH_SIZE, NUM_POINTS, IN_CHANNELS])
     adj = tf.placeholder(tf.int32, shape=[BATCH_SIZE, NUM_POINTS, K])
     
+    0 - input(3) - LIN(16) - CONV(32) - CONV(64) - CONV(128) - LIN(1024) - Output(50)
+    """
+    out_channels_fc0 = 16
+    # batch_size, input_size, out_channels
+    h_fc0 = tf.nn.relu(custom_lin(x, out_channels_fc0,is_training))
+    # Conv1
+    M_conv1 = 9
+    # [batch_size, input_size, out]
+    h_conv1 = tf.nn.relu(custom_conv2d(h_fc0, adj, 32, M_conv1,is_training=is_training))
+    # Conv2
+    M_conv2 = 9
+    h_conv2 = tf.nn.relu(custom_conv2d(h_conv1, adj, 64, M_conv2,is_training=is_training))
+    # Conv3
+    M_conv3 = 9
+    h_conv3 = tf.nn.relu(custom_conv2d(h_conv2, adj, 128, M_conv3,is_training=is_training))
+    
+    M_conv4 = 9
+    y_conv = custom_conv2d(h_conv3, adj, 3, M_conv4,BN_needed=False,is_training=is_training)
+
+    return y_conv
+
+
+def get_model_original(x, adj, num_classes):
+    """
+    x = tf.placeholder(tf.float32, shape=[BATCH_SIZE, NUM_POINTS, IN_CHANNELS])
+    adj = tf.placeholder(tf.int32, shape=[BATCH_SIZE, NUM_POINTS, K])
+
     0 - input(3) - LIN(16) - CONV(32) - CONV(64) - CONV(128) - LIN(1024) - Output(50)
     """
     out_channels_fc0 = 16
@@ -334,8 +361,7 @@ def get_model0(x, adj, num_classes):
     y_conv = custom_lin(h_fc1, num_classes)
     return y_conv
 
-
-def get_model(x, adj, perms, num_classes, architecture):
+def get_model_pool(x, adj, perms, num_classes, architecture):
     """
     0 - input(3) - LIN(16) - CONV(32) - CONV(64) - CONV(128) - LIN(1024) - Output(50)
     """
