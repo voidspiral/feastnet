@@ -22,16 +22,22 @@ Y= tf.placeholder(tf.float32, shape=[None, 3])
 # [true_hole_size,3]
 Y_nm=tf.placeholder(tf.float32, shape=[None, 3])
 
-is_training = tf.placeholder(tf.bool)
 
 #[input_size,3]
-output = get_model_fill(X,  X_adj, is_training)
+output = get_model_fill(X,  X_adj)
+
+zeros = tf.zeros([1, 3], dtype=tf.float32)
+# 索引为0的邻接点，会索引到 0,0
+output = tf.concat([zeros, output], 0)  # [N+1, C]
 
 # [coarse_fill_size, 3]
 pred_add=tf.gather(output, X_add_idx)
-loss= mesh_loss(pred_add, X_add_edge, Y_nm, Y) + laplace_loss(pred_add, X_add_adj)
-
+# loss= mesh_loss(pred_add, X_add_edge, Y_nm, Y) + laplace_loss(pred_add, X_add_adj)
+loss_total,Chamfer_loss,edge_loss,normal_loss= mesh_loss(pred_add, X_add_edge, Y_nm, Y)
+loss=normal_loss
 optimizer = tf.train.AdamOptimizer(0.1).minimize(loss)
+
+
 data_path='F:/ProjectData/surface/Aitest 22'
 annotation_path={
     'x':data_path+'/x.txt',
@@ -52,7 +58,6 @@ with tf.Session()as sess:
                    X_add_edge:x_add_edge,
                    Y:y,
                    Y_nm:y_nm,
-                   is_training:True
                    }
     
         sess.run(tf.global_variables_initializer())

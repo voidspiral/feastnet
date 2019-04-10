@@ -60,7 +60,7 @@ def mesh_loss(pred, edge_index, gt_nm, ground_truth):
     normal_loss = tf.reduce_mean(cosine) * 0.5
     
     total_loss = Chamfer_loss * 3000 + edge_loss * 300 + normal_loss * 0.5
-    return total_loss
+    return total_loss,Chamfer_loss,edge_loss,normal_loss
 
 
 def laplace_coord(pred, adj):

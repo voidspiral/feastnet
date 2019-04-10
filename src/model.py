@@ -5,7 +5,6 @@ import math
 import time
 import h5py
 
-from src.my_batch_norm import bn_layer, bn_layer_top
 # from src.train import  COARSEN_LEVEL
 
 random_seed=0
@@ -141,14 +140,13 @@ def get_patches_2(x, adj):
     return patches
 
 
-def custom_conv2d(x, adj, out_channels, M, BN_needed=True, is_training=None,translation_invariance=True,scope=''):
+def custom_conv2d(x, adj, out_channels, M, translation_invariance=True,scope=''):
     if translation_invariance == True:
         with tf.variable_scope(scope):
             print("Translation-invariant\n")
             in_channels = x.get_shape().as_list()[1]
             W = weight_variable([M, out_channels, in_channels])  # 卷积核参数
-            if not BN_needed:
-                b = bias_variable([out_channels])
+            b = bias_variable([out_channels])
             u = assignment_variable([M, in_channels])
             c = assignment_variable([M])
             K = adj.get_shape()[1]
@@ -177,7 +175,7 @@ def custom_conv2d(x, adj, out_channels, M, BN_needed=True, is_training=None,tran
             patches = tf.reshape(patches, [-1, K, M, out_channels])
             # [O, N, K, M]
             patches = tf.transpose(patches, [3, 0, 1, 2])
-            # [N, K, M]*[O, N, K, M]=[O, N, K, M]
+            # [N, K, M]*[O, N, K, M]=[O, N, K, M] element-wise
             patches = tf.multiply(q, patches)
             # [N, K, M, O]
             patches = tf.transpose(patches, [1, 2, 3, 0])
@@ -190,11 +188,7 @@ def custom_conv2d(x, adj, out_channels, M, BN_needed=True, is_training=None,tran
             # [ N, O]
             patches = tf.reduce_sum(patches, axis=1)
             # [N, O]
-            if BN_needed:
-                # if batch_norm is needed, add it here
-                patches = bn_layer_top(patches, out_channels, is_training)
-            else:
-                patches = patches + b
+            patches = patches + b
 
             return patches
 
@@ -242,14 +236,14 @@ def custom_conv2d(x, adj, out_channels, M, BN_needed=True, is_training=None,tran
 
 
 
-def custom_lin(input, out_channels,is_training,scope):
+def custom_lin(input, out_channels,scope):
     # 可以理解为升降维 1x1 Conv, 只对input最后一维进行 全连接
     with tf.variable_scope(scope):
 
         input_size, in_channels = input.get_shape().as_list()
         W = weight_variable([in_channels, out_channels])
-        
-        return bn_layer_top(tf.matmul(input, W),out_channels, is_training)
+        b = bias_variable([out_channels])
+        return tf.matmul(input, W)+b
 
 
 def custom_max_pool(input, kernel_size, stride=[2, 2], padding='VALID'):
@@ -281,7 +275,7 @@ def perm_data(input, indices):
     return xnew
 
     
-def get_model_fill(x, adj,is_training):
+def get_model_fill(x, adj):
     """
     x = tf.placeholder(tf.float32, shape=[BATCH_SIZE, NUM_POINTS, IN_CHANNELS])
     adj = tf.placeholder(tf.int32, shape=[BATCH_SIZE, NUM_POINTS, K])
@@ -290,20 +284,20 @@ def get_model_fill(x, adj,is_training):
     """
     out_channels_fc0 = 16
     # batch_size, input_size, out_channels
-    h_fc0 = tf.nn.relu(custom_lin(x,  out_channels_fc0,is_training,scope='lin1'))
+    h_fc0 = tf.nn.relu(custom_lin(x,  out_channels_fc0,scope='lin1'))
     # Conv1
     M_conv1 = 9
     # [batch_size, input_size, out]
-    h_conv1 = tf.nn.relu(custom_conv2d(h_fc0,  adj, 32, M_conv1,is_training=is_training,scope='conv1'))
+    h_conv1 = tf.nn.relu(custom_conv2d(h_fc0,  adj, 32, M_conv1,scope='conv1'))
     # Conv2
     M_conv2 = 9
-    h_conv2 = tf.nn.relu(custom_conv2d(h_conv1, adj, 64, M_conv2,is_training=is_training,scope='conv2'))
+    h_conv2 = tf.nn.relu(custom_conv2d(h_conv1, adj, 64, M_conv2,scope='conv2'))
     # Conv3
     M_conv3 = 9
-    h_conv3 = tf.nn.relu(custom_conv2d(h_conv2, adj, 128, M_conv3,is_training=is_training,scope='conv3'))
+    h_conv3 = tf.nn.relu(custom_conv2d(h_conv2, adj, 128, M_conv3,scope='conv3'))
     
     M_conv4 = 9
-    y_conv = custom_conv2d(h_conv3, adj, 3, M_conv4,BN_needed=False,is_training=is_training,scope='conv4')
+    y_conv = custom_conv2d(h_conv3, adj, 3, M_conv4,scope='conv4')
 
     return y_conv
 
