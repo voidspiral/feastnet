@@ -9,12 +9,12 @@ def get_training_data(annotation_path, data_path=None,load_previous=False):
         print('Loading training data from ' + data_path)
         return data['x'], data['adj'], data['y']
     
-    x = np.loadtxt(annotation_path['x'])[:,1:]
-    x_adj = np.loadtxt(annotation_path['adj'])[:,1:]
+    x = np.loadtxt(annotation_path['x'])[:,1:].astype(np.float32)
+    x_adj = np.loadtxt(annotation_path['adj'])[:,1:11].astype(np.int32)
     
-    x_add_index = np.loadtxt(annotation_path['add_index']).astype(np.int32)
-    x_adj_1=np.concatenate([np.expand_dims(np.zeros_like(x_adj[0]),0),x_adj])
-    x_add_adj=x_adj_1[x_add_index]
+    x_add_idx = np.loadtxt(annotation_path['add_index']).astype(np.int32)
+    x_adj_1=np.concatenate([np.expand_dims(np.zeros_like(x_adj[0],np.int32),0),x_adj])
+    x_add_adj=x_adj_1[x_add_idx]
     x_add_edge=extract_edge(x_add_adj)
     
     
@@ -23,7 +23,7 @@ def get_training_data(annotation_path, data_path=None,load_previous=False):
     y=y_nm[:,:3]
     y_nm=y_nm[:,3:]
     
-    return x,x_adj,x_add_index,x_add_edge,y,y_nm
+    return x,x_adj,x_add_idx,x_add_adj,x_add_edge,y,y_nm
     
 
 def extract_edge(adj):

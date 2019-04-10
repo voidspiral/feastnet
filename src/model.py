@@ -196,7 +196,6 @@ def custom_conv2d(x, adj, out_channels, M, BN_needed=True, is_training=None,tran
             else:
                 patches = patches + b
 
-            # conv end
             return patches
 
     else:

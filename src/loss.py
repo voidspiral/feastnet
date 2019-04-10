@@ -72,11 +72,10 @@ def laplace_coord(pred, adj):
     :return:
     '''
     adj_size = tf.count_nonzero(adj, 1)  # [coarse_fill_point] 每个元素 是该点的邻接点数量
-    # deal with unconnected points: replace NaN with 0
-    non_zeros = tf.not_equal(adj_size, 0)  # [coarse_fill_point] bool  是否有孤立点
+    
     adj_size = tf.cast(adj_size, tf.float32)
     # [coarse_fill_point]
-    adj_weights = tf.where(non_zeros, tf.reciprocal(adj_size), tf.zeros_like(adj_size))  # 非孤立点 删选出来
+    adj_weights = tf.reciprocal(adj_size)
     # [coarse_fill_point,3]
     adj_weights=tf.tile(tf.expand_dims(adj_weights,-1),[1,3])
     # [coarse_fill_point, 3]
