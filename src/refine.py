@@ -24,7 +24,7 @@ Y_nm=tf.placeholder(tf.float32, shape=[None, 3])
 is_training = tf.placeholder(tf.bool)
 
 #[input_size,3]
-output = get_model_fill(X, X_adj, is_training)
+output = get_model_fill(X,  X_adj, is_training)
 
 # [coarse_fill_size, 3]
 pred_add=tf.gather(output, X_add_index)
@@ -34,9 +34,9 @@ loss= mesh_loss(pred_add, X_add_edge, Y_nm, Y) + laplace_loss(pred_add, X_adj)
 train_step = tf.train.AdamOptimizer(0.001).minimize(loss)
 data_path='F:/ProjectData/surface/Aitest 22'
 annotation_path={
-    'x':data_path+'/X.txt',
-    'adj':data_path+'/X_adj.txt',
-    'add_index':data_path+'/X_add_index.txt',
+    'x':data_path+'/x.txt',
+    'adj':data_path+'/x_adj.txt',
+    'add_index':data_path+'/x_add_idx.txt',
     'y_normal':data_path+'/y_normal.txt'
     
 }

@@ -3,7 +3,7 @@ from tensorflow.contrib.framework import add_arg_scope
 from tensorflow.python.training import moving_averages
 
 
-def bn_layer(x, scope, is_training, epsilon=0.001, decay=0.99, reuse=None):
+def bn_layer(x, channel, scope, is_training, epsilon=0.001, decay=0.99, reuse=None):
     """
     Performs a batch normalization layer
 
@@ -18,17 +18,16 @@ def bn_layer(x, scope, is_training, epsilon=0.001, decay=0.99, reuse=None):
         The ops of a batch normalization layer
     """
     with tf.variable_scope(scope, reuse=reuse):
-        shape = x.get_shape().as_list()
         # gamma: a trainable scale factor
-        gamma = tf.get_variable("gamma", shape[-1], initializer=tf.constant_initializer(1.0), trainable=True)
+        gamma = tf.get_variable("gamma", channel, initializer=tf.constant_initializer(1.0), trainable=True)
         # beta: a trainable shift value
-        beta = tf.get_variable("beta", shape[-1], initializer=tf.constant_initializer(0.0), trainable=True)
-        moving_avg = tf.get_variable("moving_avg", shape[-1], initializer=tf.constant_initializer(0.0), trainable=False)
-        moving_var = tf.get_variable("moving_var", shape[-1], initializer=tf.constant_initializer(1.0), trainable=False)
+        beta = tf.get_variable("beta", channel, initializer=tf.constant_initializer(0.0), trainable=True)
+        moving_avg = tf.get_variable("moving_avg", channel, initializer=tf.constant_initializer(0.0), trainable=False)
+        moving_var = tf.get_variable("moving_var", channel, initializer=tf.constant_initializer(1.0), trainable=False)
         if is_training:
             # tf.nn.moments == Calculate the mean and the variance of the tensor x
             # avg, var = tf.nn.moments(x, np.arange(len(shape) - 1), keep_dims=True)
-            avg, var = tf.nn.moments(x, list(range(len(shape)-1)))
+            avg, var = tf.nn.moments(x, list(range(len(x.shape)-1)))
 
             #update_moving_avg = moving_averages.assign_moving_average(moving_avg, avg, decay)
             # update_moving_avg=tf.assign_add(moving_avg, moving_avg*decay+avg*(1-decay))
@@ -58,7 +57,7 @@ def bn_layer(x, scope, is_training, epsilon=0.001, decay=0.99, reuse=None):
     return output
 
 @add_arg_scope
-def bn_layer_top(x , is_training,scope='batch_norm', epsilon=0.001, decay=0.99):
+def bn_layer_top(x ,channel, is_training,scope='batch_norm', epsilon=0.001, decay=0.99):
     """
     Returns a batch normalization layer that automatically switch between train and test phases based on the
     tensor is_training
@@ -77,6 +76,6 @@ def bn_layer_top(x , is_training,scope='batch_norm', epsilon=0.001, decay=0.99):
 
     return tf.cond(
         is_training,
-        lambda: bn_layer(x=x, scope=scope, epsilon=epsilon, decay=decay, is_training=True, reuse=None),
-        lambda: bn_layer(x=x, scope=scope, epsilon=epsilon, decay=decay, is_training=False, reuse=True),
+        lambda: bn_layer(x=x, channel=channel,scope=scope, epsilon=epsilon, decay=decay, is_training=True, reuse=None),
+        lambda: bn_layer(x=x, channel=channel, scope=scope, epsilon=epsilon, decay=decay, is_training=False, reuse=True),
     )

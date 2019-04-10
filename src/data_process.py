@@ -3,7 +3,7 @@ import os
 import numpy as np
 from trimesh import grouping,remesh
 
-def get_training_data(annotation_path, data_path=None,load_previous=True):
+def get_training_data(annotation_path, data_path=None,load_previous=False):
     if load_previous == True and os.path.isfile(data_path):
         data = np.load(data_path)
         print('Loading training data from ' + data_path)
@@ -12,8 +12,8 @@ def get_training_data(annotation_path, data_path=None,load_previous=True):
     x = np.loadtxt(annotation_path['x'])[:,1:]
     x_adj = np.loadtxt(annotation_path['adj'])[:,1:]
     
-    x_add_index = np.loadtxt(annotation_path['add_index'])
-    x_adj_1=np.concatenate([np.zeros_like(x_adj[0]),x_adj])
+    x_add_index = np.loadtxt(annotation_path['add_index']).astype(np.int32)
+    x_adj_1=np.concatenate([np.expand_dims(np.zeros_like(x_adj[0]),0),x_adj])
     x_add_adj=x_adj_1[x_add_index]
     x_add_edge=extract_edge(x_add_adj)
     

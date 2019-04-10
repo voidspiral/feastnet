@@ -31,7 +31,7 @@ def mesh_loss(pred, edge_index, gt_nm, ground_truth):
     # [coarse_fill_size,true_hole_size]
     distance_matrix = tf.reduce_sum(tf.square(fill_output - ground_truth), axis=-1)
     # [coarse_fill_size]
-    min_q_index = tf.arg_min(distance_matrix, axis=1)
+    min_q_index = tf.argmin(distance_matrix, axis=1)
     
     p_distance = tf.reduce_sum(tf.reduce_min(distance_matrix, axis=1))
     q_distance = tf.reduce_sum(tf.reduce_min(distance_matrix, axis=0))
@@ -71,7 +71,7 @@ def laplace_coord(pred, adj):
     :param block_id:
     :return:
     '''
-    adj_size = tf.count_nonzero(adj, 2)  # [coarse_fill_point] 每个元素 是该点的邻接点数量
+    adj_size = tf.count_nonzero(adj, 1)  # [coarse_fill_point] 每个元素 是该点的邻接点数量
     # deal with unconnected points: replace NaN with 0
     non_zeros = tf.not_equal(adj_size, 0)  # [coarse_fill_point] bool  是否有孤立点
     adj_size = tf.cast(adj_size, tf.float32)

@@ -64,12 +64,12 @@ def get_weight_assigments(x, adj, u, v, c):
 def get_weight_assigments_translation_invariance(x, adj, u, c):
     # u.shape=[M, in_channels]
     
-    num_points, K = adj.get_shape().as_list()
+    K = adj.get_shape()[1]
     M, in_channels = u.get_shape().as_list()
     # [N, K, ch]
     patches = get_patches(x, adj)
     # [ N, ch, 1]
-    x = tf.reshape(x, [num_points, in_channels, 1])
+    x = tf.reshape(x, [-1, in_channels, 1])
     # [ N, ch, K]
     patches = tf.transpose(patches, [0, 2,1])
     # [N, ch, K]
@@ -77,11 +77,11 @@ def get_weight_assigments_translation_invariance(x, adj, u, c):
     # [ch, N, K]
     patches = tf.transpose(patches, [1,0,2])
     # [ch, N*K]
-    x_patches = tf.reshape(patches, [in_channels, num_points * K])
+    x_patches = tf.reshape(patches, [in_channels, -1])
     #  M, N*K  = [M, ch]  x  [ch, N*K]
     patches = tf.matmul(u, x_patches)
     # M, N, K
-    patches = tf.reshape(patches, [M, num_points, K])
+    patches = tf.reshape(patches, [M, -1, K])
     # [K, N, M]
     patches = tf.transpose(patches, [2, 1,0])
     # [K, N, M]
@@ -141,59 +141,63 @@ def get_patches_2(x, adj):
     return patches
 
 
-def custom_conv2d(x, adj, out_channels, M, BN_needed=True, is_training=None,translation_invariance=True):
+def custom_conv2d(x, adj, out_channels, M, BN_needed=True, is_training=None,translation_invariance=True,scope=''):
     if translation_invariance == True:
-        print("Translation-invariant\n")
-        input_size, in_channels = x.get_shape().as_list()
-        W = weight_variable([M, out_channels, in_channels])  # 卷积核参数
-        b = bias_variable([out_channels])
-        u = assignment_variable([M, in_channels])
-        c = assignment_variable([M])
-        input_size, K = adj.get_shape().as_list()
-        # Calculate neighbourhood size for each input - [N, neighbours]
-        adj_size = tf.count_nonzero(adj, 1)  # [N] 每个元素 是该点的邻接点数量
-        # deal with unconnected points: replace NaN with 0
-        non_zeros = tf.not_equal(adj_size, 0)  # [N] bool  是否有孤立点
-        adj_size = tf.cast(adj_size, tf.float32)
-        adj_size = tf.where(non_zeros, tf.reciprocal(adj_size), tf.zeros_like(adj_size))  # 非孤立点 删选出来
-        # [N, 1, 1]
-        adj_size = tf.reshape(adj_size, [-1, 1, 1])
-        # [N, K, M] 当K index 到 0 时， M 维相等
-        q = get_weight_assigments_translation_invariance(x, adj, u, c)
-        # [C, N]
-        x = tf.transpose(x, [1,0])
-        # [M*O,C]
-        W = tf.reshape(W, [M * out_channels, in_channels])  # 卷积核参数
-        # [M*O, N]
-        wx = tf.matmul(W, x)  # 卷积
-        # if batch_norm is needed, add it here
-        if BN_needed:
-            wx=bn_layer_top(wx,is_training)
-        # [N, M*O]
-        wx = tf.transpose(wx, [1,0])
-        # adj中k为0的索引取到的 wx 也为0
-        # [N, K, M*O]
-        patches = get_patches(wx, adj)
-        # [ N, K, M, O]
-        patches = tf.reshape(patches, [input_size, K, M, out_channels])
-        # [O, N, K, M]
-        patches = tf.transpose(patches, [3, 0, 1, 2])
-        # [N, K, M]*[O, N, K, M]=[O, N, K, M]
-        patches = tf.multiply(q, patches)
-        # [N, K, M, O]
-        patches = tf.transpose(patches, [1, 2, 3, 0])
-        # Add all the elements for all neighbours for a particular m
-        # sum data in index K is zero, so need 归一化
-        patches = tf.reduce_sum(patches, axis=1)  # [ N, M, O]
-        # [N, 1, 1]*[ N, M, O]=[ N, M, O]
-        patches = tf.multiply(adj_size, patches)  # /Ni
-        # Add add elements for all m， 因为不是 reduce_mean 所以支持M中的0
-        # [ N, O]
-        patches = tf.reduce_sum(patches, axis=1)
-        # [N, O]
-        patches = patches + b
-        # conv end
-        return patches
+        with tf.variable_scope(scope):
+            print("Translation-invariant\n")
+            in_channels = x.get_shape().as_list()[1]
+            W = weight_variable([M, out_channels, in_channels])  # 卷积核参数
+            if not BN_needed:
+                b = bias_variable([out_channels])
+            u = assignment_variable([M, in_channels])
+            c = assignment_variable([M])
+            K = adj.get_shape()[1]
+            # Calculate neighbourhood size for each input - [N, neighbours]
+            adj_size = tf.count_nonzero(adj, 1)  # [N] 每个元素 是该点的邻接点数量
+            # deal with unconnected points: replace NaN with 0
+            non_zeros = tf.not_equal(adj_size, 0)  # [N] bool  是否有孤立点
+            adj_size = tf.cast(adj_size, tf.float32)
+            adj_size = tf.where(non_zeros, tf.reciprocal(adj_size), tf.zeros_like(adj_size))  # 非孤立点 删选出来
+            # [N, 1, 1]
+            adj_size = tf.reshape(adj_size, [-1, 1, 1])
+            # [N, K, M] 当K index 到 0 时， M 维相等
+            q = get_weight_assigments_translation_invariance(x, adj, u, c)
+            # [C, N]
+            x = tf.transpose(x, [1,0])
+            # [M*O,C]
+            W = tf.reshape(W, [M * out_channels, in_channels])  # 卷积核参数
+            # [M*O, N]
+            wx = tf.matmul(W, x)  # 卷积
+            # [N, M*O]
+            wx = tf.transpose(wx, [1,0])
+            # adj中k为0的索引取到的 wx 也为0
+            # [N, K, M*O]
+            patches = get_patches(wx, adj)
+            # [ N, K, M, O]
+            patches = tf.reshape(patches, [-1, K, M, out_channels])
+            # [O, N, K, M]
+            patches = tf.transpose(patches, [3, 0, 1, 2])
+            # [N, K, M]*[O, N, K, M]=[O, N, K, M]
+            patches = tf.multiply(q, patches)
+            # [N, K, M, O]
+            patches = tf.transpose(patches, [1, 2, 3, 0])
+            # Add all the elements for all neighbours for a particular m
+            # sum data in index K is zero, so need 归一化
+            patches = tf.reduce_sum(patches, axis=1)  # [ N, M, O]
+            # [N, 1, 1]*[ N, M, O]=[ N, M, O]
+            patches = tf.multiply(adj_size, patches)  # /Ni
+            # Add add elements for all m， 因为不是 reduce_mean 所以支持M中的0
+            # [ N, O]
+            patches = tf.reduce_sum(patches, axis=1)
+            # [N, O]
+            if BN_needed:
+                # if batch_norm is needed, add it here
+                patches = bn_layer_top(patches, out_channels, is_training)
+            else:
+                patches = patches + b
+
+            # conv end
+            return patches
 
     else:
         batch_size, input_size, in_channels = x.get_shape().as_list()
@@ -239,12 +243,14 @@ def custom_conv2d(x, adj, out_channels, M, BN_needed=True, is_training=None,tran
 
 
 
-def custom_lin(input, out_channels,is_training):
+def custom_lin(input, out_channels,is_training,scope):
     # 可以理解为升降维 1x1 Conv, 只对input最后一维进行 全连接
-    input_size, in_channels = input.get_shape().as_list()
-    W = weight_variable([in_channels, out_channels])
-    
-    return bn_layer_top(tf.matmul(input, W),is_training)
+    with tf.variable_scope(scope):
+
+        input_size, in_channels = input.get_shape().as_list()
+        W = weight_variable([in_channels, out_channels])
+        
+        return bn_layer_top(tf.matmul(input, W),out_channels, is_training)
 
 
 def custom_max_pool(input, kernel_size, stride=[2, 2], padding='VALID'):
@@ -285,20 +291,20 @@ def get_model_fill(x, adj,is_training):
     """
     out_channels_fc0 = 16
     # batch_size, input_size, out_channels
-    h_fc0 = tf.nn.relu(custom_lin(x, out_channels_fc0,is_training))
+    h_fc0 = tf.nn.relu(custom_lin(x,  out_channels_fc0,is_training,scope='lin1'))
     # Conv1
     M_conv1 = 9
     # [batch_size, input_size, out]
-    h_conv1 = tf.nn.relu(custom_conv2d(h_fc0, adj, 32, M_conv1,is_training=is_training))
+    h_conv1 = tf.nn.relu(custom_conv2d(h_fc0,  adj, 32, M_conv1,is_training=is_training,scope='conv1'))
     # Conv2
     M_conv2 = 9
-    h_conv2 = tf.nn.relu(custom_conv2d(h_conv1, adj, 64, M_conv2,is_training=is_training))
+    h_conv2 = tf.nn.relu(custom_conv2d(h_conv1, adj, 64, M_conv2,is_training=is_training,scope='conv2'))
     # Conv3
     M_conv3 = 9
-    h_conv3 = tf.nn.relu(custom_conv2d(h_conv2, adj, 128, M_conv3,is_training=is_training))
+    h_conv3 = tf.nn.relu(custom_conv2d(h_conv2, adj, 128, M_conv3,is_training=is_training,scope='conv3'))
     
     M_conv4 = 9
-    y_conv = custom_conv2d(h_conv3, adj, 3, M_conv4,BN_needed=False,is_training=is_training)
+    y_conv = custom_conv2d(h_conv3, adj, 3, M_conv4,BN_needed=False,is_training=is_training,scope='conv4')
 
     return y_conv
 
