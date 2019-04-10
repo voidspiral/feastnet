@@ -12,36 +12,36 @@ def unit(tensor):
     return tf.nn.l2_normalize(tensor, dim=1)
 
 
-def mesh_loss(fill_output, gt_nm, edge_index, ground_truth):
+def mesh_loss(pred, edge_index, gt_nm, ground_truth):
     '''
     
-    :param fill_output:  [batch_size,coarse_fill_point,3]
-    :param gt_nm:  [batch_size,true_hole_size,3]
-    :param edge_index:  [batch_size,coarse_fill_edge,2]
-    :param adj:
-    :param ground_truth:
-    :param min_q_index: [batch_size,coarse_fill_size]
+    :param fill_output:  [coarse_fill_size,3]
+    :param gt_nm:  [true_hole_size,3]
+    :param edge_index:  [coarse_fill_edge,2]
+    :param ground_truth: [true_hole_size,3]
+    :param min_q_index: [coarse_fill_size]
     :return:
     '''
     
     # Chamfer_loss
-    # [batch_size, coarse_fill_size,1, 3]
-    fill_output = tf.expand_dims(fill_output, axis=2)
-    # [batch_size,1,    true_hole_size,3]
-    ground_truth = tf.expand_dims(ground_truth, axis=1)
-    # [batch_size,coarse_fill_size,true_hole_size]
+    # [ coarse_fill_size,1, 3]
+    fill_output = tf.expand_dims(pred, axis=1)
+    # [1,    true_hole_size,3]
+    ground_truth = tf.expand_dims(ground_truth, axis=0)
+    # [coarse_fill_size,true_hole_size]
     distance_matrix = tf.reduce_sum(tf.square(fill_output - ground_truth), axis=-1)
-    # [batch_size,coarse_fill_size]
-    min_q_index = tf.arg_min(distance_matrix, axis=2)
-    p_distance = tf.reduce_sum(tf.reduce_min(distance_matrix, axis=2))
-    # [batch_size,true_hole_size]
-    q_distance = tf.reduce_sum(tf.reduce_min(distance_matrix, axis=1))
+    # [coarse_fill_size]
+    min_q_index = tf.arg_min(distance_matrix, axis=1)
+    
+    p_distance = tf.reduce_sum(tf.reduce_min(distance_matrix, axis=1))
+    q_distance = tf.reduce_sum(tf.reduce_min(distance_matrix, axis=0))
     Chamfer_loss = p_distance + 0.55 * q_distance
     
-    # edge in graph
-    nod1 = tf.map_fn(lambda x: tf.gather(x[0], x[1], axis=0), [fill_output, edge_index[:, 0]])
-    # [batch_size,coarse_fill_edge,3]
-    nod2 = tf.map_fn(lambda x: tf.gather(x[0], x[1], axis=0), [fill_output, edge_index[:, 1]])
+    # [coarse_fill_edge,3]
+    nod1 = tf.gather(pred, edge_index[:, 0])
+    # [coarse_fill_edge,3]
+    nod2 = tf.gather(pred, edge_index[:, 1])
+    # [coarse_fill_edge,3]
     edge = tf.subtract(nod1, nod2)
     
     # edge length loss
@@ -49,11 +49,13 @@ def mesh_loss(fill_output, gt_nm, edge_index, ground_truth):
     edge_loss = tf.reduce_mean(edge_length) * 300
     
     # params.shape[:axis] + indices.shape +params.shape[axis + 1:]
-    # [batch_size,coarse_fill_point,3] 每个 coarse_fill_point 对应的最近 ground_truth的Normal
-    p_q_Normal = tf.map_fn(lambda x: tf.gather(x[0], x[1], axis=0), [gt_nm, min_q_index])
-    # [batch_size,coarse_fill_edge,3]
-    p_q_Normal = tf.map_fn(lambda x: tf.gather(x[0], x[1], axis=0), [p_q_Normal, edge_index[:, 0]])
-    
+    # [coarse_fill_point,3] 每个 coarse_fill_point 对应的最近 ground_truth的Normal
+
+    p_q_Normal = tf.gather(gt_nm, min_q_index)
+    # coarse_fill_edge 个起点对应的q的 normal
+    # [coarse_fill_edge,3]
+    p_q_Normal = tf.gather(p_q_Normal, edge_index[:, 0])
+    # coarse_fill_edge个cross_product求和
     cosine = tf.abs(tf.reduce_sum(tf.multiply(unit(p_q_Normal), unit(edge)), 1))
     normal_loss = tf.reduce_mean(cosine) * 0.5
     
@@ -61,7 +63,7 @@ def mesh_loss(fill_output, gt_nm, edge_index, ground_truth):
     return total_loss
 
 
-def laplace_coord(pred, placeholders, block_id):
+def laplace_coord(pred, adj):
     '''
     
     :param pred:  [coarse_fill_point,3]
@@ -69,21 +71,36 @@ def laplace_coord(pred, placeholders, block_id):
     :param block_id:
     :return:
     '''
-    
-    vertex = tf.concat([pred, tf.zeros([1, 3])], 0)
-    indices = placeholders['lape_idx'][block_id - 1][:, :8]
-    weights = tf.cast(placeholders['lape_idx'][block_id - 1][:, -1], tf.float32)
-    
-    weights = tf.tile(tf.reshape(tf.reciprocal(weights), [-1, 1]), [1, 3])
-    laplace = tf.reduce_sum(tf.gather(vertex, indices), 1)
-    laplace = tf.subtract(pred, tf.multiply(laplace, weights))
+    adj_size = tf.count_nonzero(adj, 2)  # [coarse_fill_point] 每个元素 是该点的邻接点数量
+    # deal with unconnected points: replace NaN with 0
+    non_zeros = tf.not_equal(adj_size, 0)  # [coarse_fill_point] bool  是否有孤立点
+    adj_size = tf.cast(adj_size, tf.float32)
+    # [coarse_fill_point]
+    adj_weights = tf.where(non_zeros, tf.reciprocal(adj_size), tf.zeros_like(adj_size))  # 非孤立点 删选出来
+    # [coarse_fill_point,3]
+    adj_weights=tf.tile(tf.expand_dims(adj_weights,-1),[1,3])
+    # [coarse_fill_point, 3]
+    neigbor_sum = tf.reduce_sum(get_patches(pred, adj), 1)
+    laplace = tf.subtract(pred, tf.multiply(neigbor_sum, adj_weights))
     return laplace
 
 
-def laplace_loss(pred1, pred2, placeholders, block_id):
+def laplace_loss(pred1, adj):
+    '''
+    仅仅是居中
+    :param pred1:
+    :param adj:
+    :return:
+    '''
     # laplace term
-    lap1 = laplace_coord(pred1, placeholders, block_id)
-    lap2 = laplace_coord(pred2, placeholders, block_id)
+    lap1 = laplace_coord(pred1, adj)
+    laplace_loss = tf.reduce_mean(tf.reduce_sum(tf.square(lap1))) * 1500
+    return laplace_loss
+
+def laplace_loss_casade(pred1, pred2, adj):
+    # laplace term
+    lap1 = laplace_coord(pred1, adj)
+    lap2 = laplace_coord(pred2, adj)
     laplace_loss = tf.reduce_mean(tf.reduce_sum(tf.square(tf.subtract(lap1, lap2)), 1)) * 1500
     
     move_loss = tf.reduce_mean(tf.reduce_sum(tf.square(tf.subtract(pred1, pred2)), 1)) * 100
