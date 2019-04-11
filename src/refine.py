@@ -1,8 +1,9 @@
 import tensorflow as tf
-
+import numpy as np
 from src.data_process import get_training_data
-from src.loss import mesh_loss, laplace_loss
+from src.loss import mesh_loss, laplace_loss, test_loss
 from src.model import get_model_fill
+import tensorflow.contrib.slim as slim
 
 BATCH_SIZE = 1
 
@@ -10,8 +11,7 @@ BATCH_SIZE = 1
 X = tf.placeholder(tf.float32, shape=[None, 3])
 # [ coarse_total_size,10]
 X_adj = tf.placeholder(tf.int32, shape=[None, 10])
-X_add_adj = tf.placeholder(tf.int32, shape=[None, 10])
-# 软件产生
+
 # [ coarse_fill_size]
 X_add_idx= tf.placeholder(tf.int32, shape=[None])
 # [ coarse_fill_edge_size,2]
@@ -26,19 +26,19 @@ Y_nm=tf.placeholder(tf.float32, shape=[None, 3])
 #[input_size,3]
 output = get_model_fill(X,  X_adj)
 
-zeros = tf.zeros([1, 3], dtype=tf.float32)
-# 索引为0的邻接点，会索引到 0,0
-output = tf.concat([zeros, output], 0)  # [N+1, C]
+# loss=tf.reduce_mean(tf.square(X-output))
+size=tf.shape(output)
 
-# [coarse_fill_size, 3]
-pred_add=tf.gather(output, X_add_idx)
-# loss= mesh_loss(pred_add, X_add_edge, Y_nm, Y) + laplace_loss(pred_add, X_add_adj)
-loss_total,Chamfer_loss,edge_loss,normal_loss= mesh_loss(pred_add, X_add_edge, Y_nm, Y)
-loss=normal_loss
-optimizer = tf.train.AdamOptimizer(0.1).minimize(loss)
+mesh_loss,Chamfer_loss,edge_loss,normal_loss= mesh_loss(output, X_add_edge, Y_nm, Y)
+lap_loss=laplace_loss(output, X_adj,X_add_idx)
 
 
-data_path='F:/ProjectData/surface/Aitest 22'
+total_loss=Chamfer_loss
+# total_loss=mesh_loss+lap_loss
+
+optimizer = tf.train.AdamOptimizer(0.001).minimize(total_loss)
+
+data_path = 'F:/tf_projects/3D/FeaStNet-master/data'
 annotation_path={
     'x':data_path+'/x.txt',
     'adj':data_path+'/x_adj.txt',
@@ -46,21 +46,39 @@ annotation_path={
     'y_normal':data_path+'/y_normal.txt'
     
 }
-x, x_adj, x_add_idx, x_add_adj, x_add_edge, y, y_nm=get_training_data(annotation_path)
+x, x_adj, x_add_idx,x_add_edge, y, y_nm=get_training_data(annotation_path)
 
-with tf.Session()as sess:
-    epochs=10000
+
+config = tf.ConfigProto()
+config.gpu_options.allow_growth = True
+
+with tf.Session(config=config)as sess:
+    sess.run(tf.global_variables_initializer())
+    epochs=5000
+    feed_in = {X: x,
+               X_adj:x_adj,
+               X_add_idx:x_add_idx,
+               X_add_edge:x_add_edge,
+               Y:y,
+               Y_nm:y_nm,
+               }
     for epoch in range(epochs):
-        feed_in = {X: x,
-                   X_adj:x_adj,
-                   X_add_idx:x_add_idx,
-                   X_add_adj:x_add_adj,
-                   X_add_edge:x_add_edge,
-                   Y:y,
-                   Y_nm:y_nm,
-                   }
     
-        sess.run(tf.global_variables_initializer())
-        feed_dict={}
-        _,loss_train=sess.run([optimizer, loss], feed_dict=feed_in)
-        print('loss_train = %.5f'%(loss_train))
+        _,Chamfer_loss1,edge_loss1,normal_loss1,lap_loss1,out_size\
+            =sess.run([optimizer,
+                        Chamfer_loss,edge_loss,normal_loss,lap_loss,
+                        size],
+                       feed_dict=feed_in)
+        if epoch%100==0:
+            
+            print(epoch)
+            print(Chamfer_loss1)
+            print(edge_loss1)
+            print(normal_loss1)
+            print(lap_loss1)
+
+            print('===============')
+            
+    output_array= sess.run(output,feed_dict=feed_in)
+    np.savetxt(data_path+'/data.txt',output_array,fmt='%.5f')
+    exit()

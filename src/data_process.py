@@ -15,7 +15,7 @@ def get_training_data(annotation_path, data_path=None,load_previous=False):
     x_add_idx = np.loadtxt(annotation_path['add_index']).astype(np.int32)
     x_adj_1=np.concatenate([np.expand_dims(np.zeros_like(x_adj[0],np.int32),0),x_adj])
     x_add_adj=x_adj_1[x_add_idx]
-    x_add_edge=extract_edge(x_add_adj)
+    x_add_edge=extract_edge(x_add_idx,x_add_adj)
     
     
     
@@ -23,21 +23,24 @@ def get_training_data(annotation_path, data_path=None,load_previous=False):
     y=y_nm[:,:3]
     y_nm=y_nm[:,3:]
     
-    return x,x_adj,x_add_idx,x_add_adj,x_add_edge,y,y_nm
+    return x,x_adj,x_add_idx,x_add_edge,y,y_nm
     
 
-def extract_edge(adj):
+def extract_edge(x_add_idx, add_adj):
     '''
     the range is corresponding to adj
-    :param adj:
+    :param add_adj:
     :return:
     '''
-    pt_num,K=adj.shape
-    first_pt=np.arange(1,pt_num+1)
-    first_pt=np.reshape(first_pt,[pt_num,1,1])
+    pt_num,K=add_adj.shape
+    first_pt=np.reshape(x_add_idx,[-1,1,1])
     first_pt = np.tile(first_pt, [1, K,1])
-    adj=np.reshape(adj,[pt_num,K,1])
-    pairs=np.concatenate([first_pt,adj],axis=-1)
+    
+    
+    
+    
+    add_adj=np.reshape(add_adj, [pt_num, K, 1])
+    pairs=np.concatenate([first_pt, add_adj], axis=-1)
     pairs=np.reshape(pairs,[pt_num*K,2])
     pairs=pairs[np.where(pairs[:,1]>0)]
     return pairs
@@ -82,3 +85,16 @@ def extract_faces(faces):
 #
 #
 #
+
+if __name__ == '__main__':
+    data_path = 'F:/tf_projects/3D/FeaStNet-master/data'
+    annotation_path = {
+        'x': data_path + '/x.txt',
+        'adj': data_path + '/x_adj.txt',
+        'add_index': data_path + '/x_add_idx.txt',
+        'y_normal': data_path + '/y_normal.txt'
+        
+    }
+    
+    x, x_adj, x_add_idx, x_add_adj, x_add_edge, y, y_nm = get_training_data(annotation_path)
+

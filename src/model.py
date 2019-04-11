@@ -282,7 +282,7 @@ def get_model_fill(x, adj):
     
     0 - input(3) - LIN(16) - CONV(32) - CONV(64) - CONV(128) - LIN(1024) - Output(50)
     """
-    out_channels_fc0 = 16
+    out_channels_fc0 = 16 #16
     # batch_size, input_size, out_channels
     h_fc0 = tf.nn.relu(custom_lin(x,  out_channels_fc0,scope='lin1'))
     # Conv1
@@ -295,7 +295,7 @@ def get_model_fill(x, adj):
     # Conv3
     M_conv3 = 9
     h_conv3 = tf.nn.relu(custom_conv2d(h_conv2, adj, 128, M_conv3,scope='conv3'))
-    
+
     M_conv4 = 9
     y_conv = custom_conv2d(h_conv3, adj, 3, M_conv4,scope='conv4')
 
