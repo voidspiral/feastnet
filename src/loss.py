@@ -35,20 +35,21 @@ def mesh_loss(pred, p_idx, p_edge_idx, gt_nm, ground_truth):
     debug_log=[]
     # Chamfer_loss
 
-    # [ x_size,1, 3]
+    # [x_size, 1, 3]
     pred1 = tf.expand_dims(pred, axis=1)
-    # [1,    y_size,3]
+    # [1, y_size,  3]
     ground_truth = tf.expand_dims(ground_truth, axis=0)
     # [x_size,y_size]
     distance_matrix = tf.reduce_sum(tf.square(pred1 - ground_truth), axis=-1)
     # [x_size] from 0
     min_q_idx = tf.argmin(distance_matrix, axis=1)
+    
 
     p_distance = tf.reduce_min(distance_matrix, axis=1) #[x_size]
-    p_distance=tf.gather(p_distance, p_idx - 1)
-    p_distance=tf.reduce_sum(p_distance)
+    p_distance=tf.gather(p_distance, p_idx - 1)#[p_size]
+    p_distance=tf.reduce_sum(p_distance) #[]
 
-    distance_matrix=tf.gather(distance_matrix, p_idx - 1) #[x_add_size,y_size]
+    distance_matrix=tf.gather(distance_matrix, p_idx - 1) #[p_size,y_size]
     q_distance = tf.reduce_min(distance_matrix, axis=0) #[y_size]
     q_distance=tf.reduce_sum(q_distance)
     
@@ -62,9 +63,9 @@ def mesh_loss(pred, p_idx, p_edge_idx, gt_nm, ground_truth):
     # [add_edge,3]
     p_edge = tf.subtract(p_nod1, p_nod2)
     
-    # edge length loss
+    # edge length loss [add_edge]
     edge_length = tf.reduce_sum(tf.square(p_edge), 1)
-    edge_loss = tf.reduce_mean(edge_length)
+    edge_loss = tf.reduce_mean(edge_length) # []
     
     # params.shape[:axis] + indices.shape +params.shape[axis + 1:]
     # [x_size,3] 每个 coarse_fill_point 对应的最近 ground_truth的Normal
@@ -78,7 +79,8 @@ def mesh_loss(pred, p_idx, p_edge_idx, gt_nm, ground_truth):
     cosine = tf.abs(tf.reduce_sum(tf.multiply(unit(p_q_Normal), unit(p_edge)), 1))
     normal_loss = tf.reduce_mean(cosine)
     
-    total_loss = Chamfer_loss * 3000 + edge_loss * 300 + normal_loss * 0.5
+    # total_loss = Chamfer_loss * 3000 + edge_loss * 300 + normal_loss * 0.5
+    total_loss = Chamfer_loss  + edge_loss  + normal_loss
     # total_loss = Chamfer_loss
     return total_loss,Chamfer_loss,edge_loss,normal_loss
 
@@ -120,12 +122,12 @@ def laplace_loss(pred, adj, add_idx):
     laplace_loss = tf.reduce_mean(tf.reduce_sum(tf.square(lap),1)) * 1500
     return laplace_loss
 
-def laplace_loss_casade(pred1, pred2, adj):
+def laplace_loss_cascade(pred1, pred2, adj, add_idx):
     # laplace term
-    lap1 = laplace_coord(pred1, adj)
-    lap2 = laplace_coord(pred2, adj)
+    lap1 = laplace_coord(pred1, adj,add_idx)
+    lap2 = laplace_coord(pred2, adj,add_idx)
     laplace_loss = tf.reduce_mean(tf.reduce_sum(tf.square(tf.subtract(lap1, lap2)), 1)) * 1500
     
-    move_loss = tf.reduce_mean(tf.reduce_sum(tf.square(tf.subtract(pred1, pred2)), 1)) * 100
-    move_loss = tf.cond(tf.equal(block_id, 1), lambda: 0., lambda: move_loss)
-    return laplace_loss + move_loss
+    # move_loss = tf.reduce_mean(tf.reduce_sum(tf.square(tf.subtract(pred1, pred2)), 1)) * 100
+    # move_loss = tf.cond(tf.equal(block_id, 1), lambda: 0., lambda: move_loss)
+    return laplace_loss

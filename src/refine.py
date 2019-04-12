@@ -1,7 +1,7 @@
 import tensorflow as tf
 import numpy as np
 from src.data_process import get_training_data
-from src.loss import mesh_loss, laplace_loss, test_loss
+from src.loss import mesh_loss, laplace_loss, test_loss, laplace_loss_cascade
 from src.model import get_model_fill
 import tensorflow.contrib.slim as slim
 
@@ -30,10 +30,11 @@ output = get_model_fill(X,  X_adj)
 size=tf.shape(output)
 
 mesh_loss,Chamfer_loss,edge_loss,normal_loss= mesh_loss(output, X_add_idx,X_add_edge, Y_nm, Y)
-lap_loss=laplace_loss(output, X_adj,X_add_idx)
+# lap_loss=laplace_loss(output, X_adj,X_add_idx)
+lap_loss=laplace_loss_cascade(X, output, X_adj, X_add_idx)
 
 
-total_loss=mesh_loss+lap_loss
+total_loss=mesh_loss+100*lap_loss
 # total_loss=mesh_loss+lap_loss
 
 optimizer = tf.train.AdamOptimizer(0.001).minimize(total_loss)
@@ -75,9 +76,10 @@ with tf.Session(config=config)as sess:
                         size],
                        feed_dict=feed_in)
         if epoch%100==0:
-            if  loss< min_loss:
-                print('save ckpt\n')
-                saver.save(sess, ckpt_path + "/model.ckpt", global_step=epoch)
+            # if  loss< min_loss:
+            #     min_loss=loss
+            #     print('save ckpt\n')
+            #     saver.save(sess, ckpt_path + "/model.ckpt", global_step=epoch)
 
             print('epoch = %d \nChamfer_loss=%.2f\nedge_loss=%.2f\nnormal_loss=%.2f\nlap_loss1=%.2f\n'
                   %(epoch,Chamfer_loss1,edge_loss1,normal_loss1,lap_loss1))
@@ -88,5 +90,5 @@ with tf.Session(config=config)as sess:
     output_array= sess.run(output,feed_dict=feed_in)
 
     output_array=np.concatenate([np.expand_dims(x_add_idx,1),output_array[x_add_idx-1]],axis=1)
-    np.savetxt(data_path+'/data.txt',output_array,fmt='%.5f')
+    np.savetxt(data_path+'/p_output.txt',output_array,fmt='%.5f')
     exit()

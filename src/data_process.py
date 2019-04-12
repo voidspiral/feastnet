@@ -115,6 +115,7 @@ if __name__ == '__main__':
         
     }
 
+    x, x_adj, x_add_idx, x_add_edge, y, y_nm = get_training_data(annotation_path)
 
-    output(annotation_path)
+    # output(annotation_path)
 
