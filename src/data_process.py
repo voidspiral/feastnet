@@ -13,8 +13,7 @@ def get_training_data(annotation_path, data_path=None,load_previous=False):
     x_adj = np.loadtxt(annotation_path['adj'])[:,1:11].astype(np.int32)
     
     x_add_idx = np.loadtxt(annotation_path['add_index']).astype(np.int32)
-    x_adj_1=np.concatenate([np.expand_dims(np.zeros_like(x_adj[0],np.int32),0),x_adj])
-    x_add_adj=x_adj_1[x_add_idx]
+    x_add_adj=x_adj[x_add_idx-1]
     x_add_edge=extract_edge(x_add_idx,x_add_adj)
     
     
@@ -44,6 +43,13 @@ def extract_edge(x_add_idx, add_adj):
     pairs=np.reshape(pairs,[pt_num*K,2])
     pairs=pairs[np.where(pairs[:,1]>0)]
     return pairs
+
+
+def gather_from_one(x, idx):
+    x = np.concatenate([np.expand_dims(np.zeros_like(x[0], x.dtype), axis=0), x], axis=0)
+    x = x[idx]
+    return x
+
 
 def extract_faces(faces):
     edges = np.stack([faces[:, g]
@@ -86,15 +92,29 @@ def extract_faces(faces):
 #
 #
 
+def output(annotation_path):
+    
+    output = np.loadtxt(annotation_path['x'])[:,1:].astype(np.float32)
+    x_add_idx = np.loadtxt(annotation_path['add_index']).astype(np.int32)
+    add=output[x_add_idx-1]
+    add=np.concatenate([np.expand_dims(x_add_idx,1),add],axis=1)
+    np.savetxt(annotation_path['p_output'],add,fmt='%.5f')
+
+  
+    
+    
 if __name__ == '__main__':
-    data_path = 'F:/tf_projects/3D/FeaStNet-master/data'
+    root_data_path = 'F:/tf_projects/3D/FeaStNet-master/data'
     annotation_path = {
-        'x': data_path + '/x.txt',
-        'adj': data_path + '/x_adj.txt',
-        'add_index': data_path + '/x_add_idx.txt',
-        'y_normal': data_path + '/y_normal.txt'
+        'x': root_data_path + '/x.txt',
+        'adj': root_data_path + '/x_adj.txt',
+        'add_index': root_data_path + '/x_add_idx.txt',
+        'y_normal': root_data_path + '/y_normal.txt',
+        'output': root_data_path + '/output.txt',
+        'p_output': root_data_path + '/p_output.txt'
         
     }
-    
-    x, x_adj, x_add_idx, x_add_adj, x_add_edge, y, y_nm = get_training_data(annotation_path)
+
+
+    output(annotation_path)
 
