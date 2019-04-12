@@ -66,7 +66,7 @@ def get_weight_assigments_translation_invariance(x, adj, u, c):
     K = adj.get_shape()[1]
     M, in_channels = u.get_shape().as_list()
     # [N, K, ch]
-    patches = get_patches(x, adj)
+    patches = get_patches_2(x, adj)
     # [ N, ch, 1]
     x = tf.reshape(x, [-1, in_channels, 1])
     # [ N, ch, K]
@@ -80,7 +80,7 @@ def get_weight_assigments_translation_invariance(x, adj, u, c):
     #  M, N*K  = [M, ch]  x  [ch, N*K]
     patches = tf.matmul(u, x_patches)
     # M, N, K
-    patches = tf.reshape(patches, [M, -1, K])
+    patches = tf.reshape(patches, [M, -1, K*K])
     # [K, N, M]
     patches = tf.transpose(patches, [2, 1,0])
     # [K, N, M]
@@ -125,16 +125,19 @@ def get_patches_2(x, adj):
     
     patches_adj = tf.gather(_adj, adj)  # [num_points,K,K]
     K2=K*K
-    patches_adj = tf.reshape(patches_adj, [num_points, K2])
+    patches_adj = tf.reshape(patches_adj, [-1, K2])
     
-    def cut_nodes(x):
+    def cut_nodes(i,x):
         y, idx = tf.unique(x)
-        paddings = tf.constant([0, K2 - tf.shape(y)])
-        y = tf.pad(y, paddings)
-        return y
+        z=tf.boolean_mask(y,tf.not_equal(y,i))
+        paddings = [[0, K2 - tf.shape(z)[0]]]
+        z = tf.pad(z, paddings)
+        return z
     
     # [num_points,K2] adj_2 need to save in numpy
-    adj_2 = tf.map_fn(lambda x: cut_nodes(x), patches_adj)
+    adj_2 = tf.map_fn(lambda x: cut_nodes(x[0],x[1]),
+                      (tf.range(tf.shape(patches_adj)[0])+1,patches_adj),
+                      dtype=tf.int32)
     patches = tf.gather(x, adj_2)  # [num_points,K2,in_channels]
 
     return patches
@@ -170,9 +173,9 @@ def custom_conv2d(x, adj, out_channels, M, translation_invariance=True,scope='')
             wx = tf.transpose(wx, [1,0])
             # adj中k为0的索引取到的 wx 也为0
             # [N, K, M*O]
-            patches = get_patches(wx, adj)
+            patches = get_patches_2(wx, adj)
             # [ N, K, M, O]
-            patches = tf.reshape(patches, [-1, K, M, out_channels])
+            patches = tf.reshape(patches, [-1, K*K, M, out_channels])
             # [O, N, K, M]
             patches = tf.transpose(patches, [3, 0, 1, 2])
             # [N, K, M]*[O, N, K, M]=[O, N, K, M] element-wise
@@ -284,10 +287,10 @@ def get_model_fill(x, adj):
     """
     # batch_size, input_size, out_channels
     x = tf.nn.relu(custom_lin(x,  16,scope='lin1'))
-    h_dims=[32,32,64,64,128,128]
+    h_dims=[32,32,64,64,64,64,128,128,256]
     for dim in h_dims:
-        x=tf.nn.relu(custom_conv2d(x,  adj, dim, 9,scope='conv1'))
-    y_conv = custom_conv2d(x, adj, 3, 9,scope='conv4')
+        x=tf.nn.relu(custom_conv2d(x,  adj, dim, 12,scope='conv1'))
+    y_conv = custom_conv2d(x, adj, 3, 12,scope='conv4')
     return y_conv
 
 

@@ -80,7 +80,7 @@ def mesh_loss(pred, p_idx, p_edge_idx, gt_nm, ground_truth):
     normal_loss = tf.reduce_mean(cosine)
     
     # total_loss = Chamfer_loss * 3000 + edge_loss * 300 + normal_loss * 0.5
-    total_loss = Chamfer_loss  + edge_loss  + normal_loss
+    total_loss = 100*Chamfer_loss  + edge_loss  + normal_loss
     # total_loss = Chamfer_loss
     return total_loss,Chamfer_loss,edge_loss,normal_loss
 
@@ -119,14 +119,14 @@ def laplace_loss(pred, adj, add_idx):
     '''
     # laplace term
     lap = laplace_coord(pred, adj, add_idx) #[add_size,3]
-    laplace_loss = tf.reduce_mean(tf.reduce_sum(tf.square(lap),1)) * 1500
+    laplace_loss = tf.reduce_mean(tf.reduce_sum(tf.square(lap),1))
     return laplace_loss
 
 def laplace_loss_cascade(pred1, pred2, adj, add_idx):
     # laplace term
     lap1 = laplace_coord(pred1, adj,add_idx)
     lap2 = laplace_coord(pred2, adj,add_idx)
-    laplace_loss = tf.reduce_mean(tf.reduce_sum(tf.square(tf.subtract(lap1, lap2)), 1)) * 1500
+    laplace_loss = tf.reduce_mean(tf.reduce_sum(tf.square(tf.subtract(lap1, lap2)), 1))
     
     # move_loss = tf.reduce_mean(tf.reduce_sum(tf.square(tf.subtract(pred1, pred2)), 1)) * 100
     # move_loss = tf.cond(tf.equal(block_id, 1), lambda: 0., lambda: move_loss)
