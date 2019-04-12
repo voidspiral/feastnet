@@ -62,8 +62,8 @@ perm0 = tf.placeholder(tf.int32, shape=[None])
 
 y = tf.placeholder(tf.float32, shape=[BATCH_SIZE, NUM_POINTS, NUM_CLASSES])
 # conv2.shape:  [batch_size, input_size, out_channel]
-# output = get_model(x, [adj0, adj1], [perm0], NUM_CLASSES)
-output = get_model(x, adj0, NUM_CLASSES)
+output = get_model(x, [adj0, adj1], [perm0], NUM_CLASSES)
+# output = get_model(x, adj0, NUM_CLASSES)
 
 batch = tf.Variable(0, trainable=False)
 

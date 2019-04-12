@@ -302,6 +302,7 @@ def get_model_fill(x, adj):
     return y_conv
 
 
+
 def get_model_original(x, adj, num_classes):
     """
     x = tf.placeholder(tf.float32, shape=[BATCH_SIZE, NUM_POINTS, IN_CHANNELS])
@@ -333,7 +334,9 @@ def get_model_original(x, adj, num_classes):
     return y_conv
 
 COARSEN_LEVEL=2
-def get_model_pool(x, adj, perms, num_classes, architecture):
+
+
+def get_model(x, adj, perms, num_classes, architecture):
     """
     0 - input(3) - LIN(16) - CONV(32) - CONV(64) - CONV(128) - LIN(1024) - Output(50)
     """
@@ -349,14 +352,11 @@ def get_model_pool(x, adj, perms, num_classes, architecture):
     # [batch_size, input_size, out]
     conv2 = tf.nn.relu(custom_conv2d(conv1, adj[0], out_channels_conv2, M_conv2))
     conv2 = perm_data(conv2, perms[0])
-    # conv2 = tf.nn.max_pool(conv1, adj[0], out_channels_conv2, M_conv2)
-    pool_layer = conv2
-    for i in range(COARSEN_LEVEL):
-        pool_layer = tf.nn.pool(pool_layer, [2], 'MAX', 'SAME', strides=[2])
+    
     # Conv3
     M_conv3 = 9
     out_channels_conv3 = 128
-    conv3 = tf.nn.relu(custom_conv2d(pool_layer, adj[1], out_channels_conv3, M_conv3))
+    conv3 = tf.nn.relu(custom_conv2d(conv2, adj[1], out_channels_conv3, M_conv3))
     # Lin(1024)
     out_channels_fc1 = 1024
     fc1 = tf.nn.relu(custom_lin(conv3, out_channels_fc1))
