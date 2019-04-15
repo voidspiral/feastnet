@@ -14,16 +14,20 @@ def get_training_data(annotation_path, data_path=None,load_previous=False):
     x_add_idx = np.loadtxt(annotation_path['add_index']).astype(np.int32)
     x_add_adj=x_adj[x_add_idx-1]
     x_add_edge=extract_edge(x_add_idx,x_add_adj)
-    
+    mask=build_mask(x.shape[0],x_add_idx)
     
     
     y_nm = np.loadtxt(annotation_path['y_normal'])
     y=y_nm[:,:3]
     y_nm=y_nm[:,3:]
     
-    return x,x_adj,x_add_idx,x_add_edge,y,y_nm
+    return x,x_adj,x_add_idx,x_add_edge,y,y_nm,mask
     
-
+def build_mask(num,x_add_idx):
+    mask=np.zeros([num])
+    mask[x_add_idx-1]=1
+    mask=mask.astype(np.bool)
+    return mask
 def extract_edge(x_add_idx, add_adj):
     '''
     the range is corresponding to adj
@@ -114,7 +118,7 @@ if __name__ == '__main__':
         
     }
 
-    # x, x_adj, x_add_idx, x_add_edge, y, y_nm = get_training_data(annotation_path)
+    x, x_adj, x_add_idx, x_add_edge, y, y_nm = get_training_data(annotation_path)
 
-    output(annotation_path)
+    # output(annotation_path)
 

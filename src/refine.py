@@ -4,13 +4,14 @@ from datetime import datetime
 import tensorflow as tf
 import numpy as np
 from src.data_process import get_training_data
-from src.loss import mesh_loss, laplace_loss, test_loss, laplace_loss_cascade
+from src.loss import mesh_loss, laplace_loss, test_loss, laplace_loss_cascade, mask_output
 from src.model import get_model_fill
 
 BATCH_SIZE = 1
 
 # [ coarse_total_size,3]
 X = tf.placeholder(tf.float32, shape=[None, 3])
+Mask = tf.placeholder(tf.bool, shape=[None])
 # [ coarse_total_size,10]
 X_adj = tf.placeholder(tf.int32, shape=[None, 10])
 
@@ -30,13 +31,14 @@ output = get_model_fill(X,  X_adj)
 
 # loss=tf.reduce_mean(tf.square(X-output))
 size=tf.shape(output)
+output=tf.where(Mask, output, X)
 
-mesh_loss,Chamfer_loss,edge_loss,normal_loss= mesh_loss(output, X_add_idx,X_add_edge, Y_nm, Y)
+mesh_loss,Chamfer_loss,edge_loss,normal_loss,dbg_list= mesh_loss(output, X_add_idx,X_add_edge, Y_nm, Y)
 lap_loss=laplace_loss(output, X_adj,X_add_idx)
-lap_loss_c=laplace_loss_cascade(X, output, X_adj, X_add_idx)
+# lap_loss_c=laplace_loss_cascade(X, output, X_adj, X_add_idx)
 
 
-total_loss= mesh_loss + 200 * lap_loss + 100 * lap_loss_c
+total_loss= mesh_loss
 # total_loss=mesh_loss+lap_loss
 
 optimizer = tf.train.AdamOptimizer(0.001).minimize(total_loss)
@@ -50,7 +52,7 @@ annotation_path={
     'y_normal':data_path+'/y_normal.txt'
     
 }
-x, x_adj, x_add_idx,x_add_edge, y, y_nm=get_training_data(annotation_path)
+x, x_adj, x_add_idx,x_add_edge, y, y_nm,mask=get_training_data(annotation_path)
 
 # dir_load = '/20190312-1528'  # where to restore the model
 dir_load =None
@@ -72,30 +74,34 @@ with tf.Session(config=config)as sess:
         saver.restore(sess, var_file)  # 从模型中恢复最新变量
 
     epochs=100000
-    min_loss=10000
+    min_loss=1000000
     feed_in = {X: x,
                X_adj:x_adj,
                X_add_idx:x_add_idx,
                X_add_edge:x_add_edge,
+               Mask:mask,
                Y:y,
                Y_nm:y_nm,
                }
     
     for epoch in range(epochs):
     
-        _,loss,Chamfer_loss1,edge_loss1,normal_loss1,lap_loss1,lap_loss2\
+        _,loss,Chamfer_loss1,edge_loss1,normal_loss1,lap_loss1,\
+        nod1,nod2,e_idx,e_len,var\
             =sess.run([optimizer,
                         total_loss,Chamfer_loss,edge_loss,normal_loss,lap_loss,
-                       lap_loss_c],
+                       dbg_list[0],dbg_list[1],dbg_list[2],dbg_list[3],dbg_list[4]
+                       ],
                        feed_dict=feed_in)
-        if epoch%100==0:
-            if  Chamfer_loss1< min_loss:
-                min_loss=Chamfer_loss1
+        edge_len=np.reshape(e_len,[-1,1])
+        if epoch%50==0:
+            if  loss< min_loss:
+                min_loss=loss
                 print('save ckpt\n')
-                saver.save(sess, save_checkpoints_dir+"/model.ckpt", global_step=int(epoch/100))
+                saver.save(sess, save_checkpoints_dir+"/model.ckpt", global_step=int(epoch/50))
 
-            print('epoch = %d \nChamfer_loss=%.2f\nedge_loss=%.2f\nnormal_loss=%.2f\nlap_loss1=%.2f\nlap_loss2=%.2f\n'
-                  %(epoch,Chamfer_loss1,edge_loss1,normal_loss1,lap_loss1,lap_loss2))
+            print('epoch = %d \nloss=%.4f\nChamfer_loss=%.4f\nedge_loss=%.4f\nnormal_loss=%.4f\nlap_loss=%.4f\n'
+                  %(epoch,loss,Chamfer_loss1,edge_loss1,normal_loss1,lap_loss1))
 
             print('===============')
     

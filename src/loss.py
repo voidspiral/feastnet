@@ -21,8 +21,17 @@ def test_loss(pred,ground_truth):
 #     x = tf.gather(x, idx)
 #     return x
 
-    
-def mesh_loss(pred, p_idx, p_edge_idx, gt_nm, ground_truth):
+def mask_output(pred,X,mask):
+    tf.where(mask,pred,X)
+    def then_expression_fn():
+        return pred
+
+    def else_expression_fn():
+        return X
+
+    pred=tf.cond(mask,then_expression_fn,else_expression_fn)
+    return pred
+def mesh_loss(pred, p_idx, p_edge_idx,gt_nm, ground_truth):
     '''
     
     :param pred:  [x_size,3]
@@ -53,20 +62,27 @@ def mesh_loss(pred, p_idx, p_edge_idx, gt_nm, ground_truth):
     q_distance = tf.reduce_min(distance_matrix, axis=0) #[y_size]
     q_distance=tf.reduce_sum(q_distance)
     
-    
-    Chamfer_loss = p_distance + 0.55 * q_distance
+    # 如果目标点非常多，那么 p_distance可以占比较大，否则会聚拢
+    Chamfer_loss = 0.1*p_distance +  q_distance
     
     # [add_edge,3]
     p_nod1 = tf.gather(pred, p_edge_idx[:, 0] - 1)
     # [add_edge,3]
+
     p_nod2 = tf.gather(pred, p_edge_idx[:, 1] - 1)
     # [add_edge,3]
     p_edge = tf.subtract(p_nod1, p_nod2)
-    
     # edge length loss [add_edge]
-    edge_length = tf.reduce_sum(tf.square(p_edge), 1)
-    edge_loss = tf.reduce_mean(edge_length) # []
-    
+    edge_length = tf.reduce_sum(tf.square(p_edge), 1) #[add_edge]
+    debug_log.append(p_nod1)
+    debug_log.append(p_nod2)
+    debug_log.append(p_edge_idx)
+    debug_log.append(edge_length)
+    mean, var = tf.nn.moments(edge_length,axes=[0])
+    edge_loss=mean+var
+    debug_log.append(var)
+
+
     # params.shape[:axis] + indices.shape +params.shape[axis + 1:]
     # [x_size,3] 每个 coarse_fill_point 对应的最近 ground_truth的Normal
     x_q_Normal = tf.gather(gt_nm, min_q_idx) # [x_size,3]
@@ -79,10 +95,9 @@ def mesh_loss(pred, p_idx, p_edge_idx, gt_nm, ground_truth):
     cosine = tf.abs(tf.reduce_sum(tf.multiply(unit(p_q_Normal), unit(p_edge)), 1))
     normal_loss = tf.reduce_mean(cosine)
     
-    # total_loss = Chamfer_loss * 3000 + edge_loss * 300 + normal_loss * 0.5
-    total_loss = 100*Chamfer_loss  + edge_loss  + normal_loss
-    # total_loss = Chamfer_loss
-    return total_loss,Chamfer_loss,edge_loss,normal_loss
+    # total_loss = Chamfer_loss  + 100*edge_var  + normal_loss
+    total_loss = 1000*edge_loss
+    return total_loss,Chamfer_loss,edge_loss,normal_loss,debug_log
 
 
 def laplace_coord(pred, adj, p_idx):

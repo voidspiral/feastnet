@@ -26,11 +26,10 @@ config.gpu_options.allow_growth = True
 with tf.Session(config=config)as sess:
     sess.run(tf.global_variables_initializer())
     ckpt_path = 'F:/tf_projects/3D/FeaStNet-master/ckpt'
-    dir_save='20190412-2044'
+    dir_save='/20190413-1931'
     save_checkpoints_dir = ckpt_path + '/' + dir_save
 
-    # var_file = ckpt_path+'/model.ckpt-148'
-    var_file = save_checkpoints_dir+'-189'
+    var_file = save_checkpoints_dir+'/model.ckpt-4'
     saver.restore(sess, var_file)  # 从模型中恢复最新变量
     annotation_path = {
         'x': data_path + '/x.txt',
@@ -38,7 +37,7 @@ with tf.Session(config=config)as sess:
         'add_index': data_path + '/x_add_idx.txt',
         'y_normal': data_path + '/y_normal.txt'
     }
-    x, x_adj, x_add_idx, x_add_edge, y, y_nm = get_training_data(annotation_path)
+    x, x_adj, x_add_idx, x_add_edge, y, y_nm,mask = get_training_data(annotation_path)
 
     feed_in = {X: x,
                X_adj:x_adj,

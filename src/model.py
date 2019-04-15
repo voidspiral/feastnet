@@ -287,7 +287,7 @@ def get_model_fill(x, adj):
     """
     # batch_size, input_size, out_channels
     x = tf.nn.relu(custom_lin(x,  16,scope='lin1'))
-    h_dims=[32,32,64,64,64,64,128,128,256]
+    h_dims=[32,64,128,256]
     for dim in h_dims:
         x=tf.nn.relu(custom_conv2d(x,  adj, dim, 12,scope='conv1'))
     y_conv = custom_conv2d(x, adj, 3, 12,scope='conv4')
