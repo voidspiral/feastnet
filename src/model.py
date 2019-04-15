@@ -46,7 +46,7 @@ def get_weight_assigments(x, adj, u, v, c):
     # [batch_size, N, M]
     vx = tf.transpose(vx, [0, 2, 1])
     # [batch_size, N, K, M]
-    patches = get_patches(vx, adj)
+    patches = get_patches_1(vx, adj)
     # [K, batch_size, M, N]
     patches = tf.transpose(patches, [2, 0, 3, 1])
     # [K, batch_size, M, N]
@@ -60,13 +60,12 @@ def get_weight_assigments(x, adj, u, v, c):
     return patches
 
 
-def get_weight_assigments_translation_invariance(x, adj, u, c):
+def get_weight_assigments_translation_invariance(x, adj, u, c,ring):
     # u.shape=[M, in_channels]
     
-    K = adj.get_shape()[1]
     M, in_channels = u.get_shape().as_list()
     # [N, K, ch]
-    patches = get_patches_2(x, adj)
+    K,patches=get_patches(x, adj, ring)
     # [ N, ch, 1]
     x = tf.reshape(x, [-1, in_channels, 1])
     # [ N, ch, K]
@@ -80,7 +79,7 @@ def get_weight_assigments_translation_invariance(x, adj, u, c):
     #  M, N*K  = [M, ch]  x  [ch, N*K]
     patches = tf.matmul(u, x_patches)
     # M, N, K
-    patches = tf.reshape(patches, [M, -1, K*K])
+    patches = tf.reshape(patches, [M, -1, K])
     # [K, N, M]
     patches = tf.transpose(patches, [2, 1,0])
     # [K, N, M]
@@ -91,7 +90,7 @@ def get_weight_assigments_translation_invariance(x, adj, u, c):
     return patches
 
 
-def get_patches(x, adj):
+def get_patches_1(x, adj):
     '''
     获得 x 的adj patch
     :param x:  N, C
@@ -105,6 +104,12 @@ def get_patches(x, adj):
     patches = tf.gather(x, adj) #[N,K,C]
     return patches
 
+def get_patches(x,adj,ring_num):
+    K = adj.get_shape()[1]
+    if ring_num==1:
+        return K,get_patches_1(x,adj)
+    elif ring_num==2:
+        return K*K,get_patches_2(x,adj)
 
 def get_patches_2(x, adj):
     '''
@@ -143,7 +148,7 @@ def get_patches_2(x, adj):
     return patches
 
 
-def custom_conv2d(x, adj, out_channels, M, translation_invariance=True,scope=''):
+def custom_conv2d(x, adj, out_channels, M, ring,translation_invariance=True,scope=''):
     if translation_invariance == True:
         with tf.variable_scope(scope):
             print("Translation-invariant\n")
@@ -152,7 +157,6 @@ def custom_conv2d(x, adj, out_channels, M, translation_invariance=True,scope='')
             b = bias_variable([out_channels])
             u = assignment_variable([M, in_channels])
             c = assignment_variable([M])
-            K = adj.get_shape()[1]
             # Calculate neighbourhood size for each input - [N, neighbours]
             adj_size = tf.count_nonzero(adj, 1)  # [N] 每个元素 是该点的邻接点数量
             # deal with unconnected points: replace NaN with 0
@@ -162,7 +166,7 @@ def custom_conv2d(x, adj, out_channels, M, translation_invariance=True,scope='')
             # [N, 1, 1]
             adj_size = tf.reshape(adj_size, [-1, 1, 1])
             # [N, K, M] 当K index 到 0 时， M 维相等
-            q = get_weight_assigments_translation_invariance(x, adj, u, c)
+            q = get_weight_assigments_translation_invariance(x, adj, u, c,ring)
             # [C, N]
             x = tf.transpose(x, [1,0])
             # [M*O,C]
@@ -173,9 +177,9 @@ def custom_conv2d(x, adj, out_channels, M, translation_invariance=True,scope='')
             wx = tf.transpose(wx, [1,0])
             # adj中k为0的索引取到的 wx 也为0
             # [N, K, M*O]
-            patches = get_patches_2(wx, adj)
+            K, patches = get_patches(wx, adj, ring)
             # [ N, K, M, O]
-            patches = tf.reshape(patches, [-1, K*K, M, out_channels])
+            patches = tf.reshape(patches, [-1, K, M, out_channels])
             # [O, N, K, M]
             patches = tf.transpose(patches, [3, 0, 1, 2])
             # [N, K, M]*[O, N, K, M]=[O, N, K, M] element-wise
@@ -219,7 +223,7 @@ def custom_conv2d(x, adj, out_channels, M, translation_invariance=True,scope='')
         # Reshape and transpose wx into [batch_size, input_size, M*out_channels]
         wx = tf.transpose(wx, [0, 2, 1])
         # Get patches from wx - [batch_size, input_size, K(neighbours-here input_size), M*out_channels]
-        patches = get_patches(wx, adj)
+        patches = get_patches_1(wx, adj)
         # [batch_size, input_size, K, M]
         q = get_weight_assigments(x, adj, u, v, c)
         # Element wise multiplication of q and patches for each input -- [batch_size, input_size, K, M, out]
@@ -287,10 +291,11 @@ def get_model_fill(x, adj):
     """
     # batch_size, input_size, out_channels
     x = tf.nn.relu(custom_lin(x,  16,scope='lin1'))
-    h_dims=[32,64,128,256]
+    h_dims=[32,32,64,64,128,128,256]
+    
     for dim in h_dims:
-        x=tf.nn.relu(custom_conv2d(x,  adj, dim, 12,scope='conv1'))
-    y_conv = custom_conv2d(x, adj, 3, 12,scope='conv4')
+        x=tf.nn.relu(custom_conv2d(x,  adj, dim, M=9,ring=2,scope='conv1'))
+    y_conv = custom_conv2d(x, adj, 3, M=9,ring=1,scope='conv4')
     return y_conv
 
 

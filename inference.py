@@ -26,10 +26,10 @@ config.gpu_options.allow_growth = True
 with tf.Session(config=config)as sess:
     sess.run(tf.global_variables_initializer())
     ckpt_path = 'F:/tf_projects/3D/FeaStNet-master/ckpt'
-    dir_save='/20190413-1931'
+    dir_save='/20190415-1219'
     save_checkpoints_dir = ckpt_path + '/' + dir_save
 
-    var_file = save_checkpoints_dir+'/model.ckpt-4'
+    var_file = save_checkpoints_dir+'/model.ckpt-471'
     saver.restore(sess, var_file)  # 从模型中恢复最新变量
     annotation_path = {
         'x': data_path + '/x.txt',

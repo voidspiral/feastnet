@@ -1,6 +1,6 @@
 import tensorflow as tf
 
-from src.model import get_patches
+from src.model import get_patches_1
 
 
 def get_generate(whole_output, hole_x):
@@ -63,7 +63,7 @@ def mesh_loss(pred, p_idx, p_edge_idx,gt_nm, ground_truth):
     q_distance=tf.reduce_sum(q_distance)
     
     # 如果目标点非常多，那么 p_distance可以占比较大，否则会聚拢
-    Chamfer_loss = 0.1*p_distance +  q_distance
+    Chamfer_loss = 0.5*p_distance + q_distance
     
     # [add_edge,3]
     p_nod1 = tf.gather(pred, p_edge_idx[:, 0] - 1)
@@ -79,7 +79,8 @@ def mesh_loss(pred, p_idx, p_edge_idx,gt_nm, ground_truth):
     debug_log.append(p_edge_idx)
     debug_log.append(edge_length)
     mean, var = tf.nn.moments(edge_length,axes=[0])
-    edge_loss=mean+var
+    edge_loss=mean+10*var
+    # edge_loss=mean
     debug_log.append(var)
 
 
@@ -95,8 +96,7 @@ def mesh_loss(pred, p_idx, p_edge_idx,gt_nm, ground_truth):
     cosine = tf.abs(tf.reduce_sum(tf.multiply(unit(p_q_Normal), unit(p_edge)), 1))
     normal_loss = tf.reduce_mean(cosine)
     
-    # total_loss = Chamfer_loss  + 100*edge_var  + normal_loss
-    total_loss = 1000*edge_loss
+    total_loss = Chamfer_loss  + 5*edge_loss  + 0.01*normal_loss
     return total_loss,Chamfer_loss,edge_loss,normal_loss,debug_log
 
 
@@ -116,7 +116,7 @@ def laplace_coord(pred, adj, p_idx):
     # [x_size,3]
     adj_weights=tf.tile(tf.expand_dims(adj_weights,-1),[1,3])
     
-    patch_avg=tf.reduce_sum(get_patches(pred, adj),axis=1) #[x_size,3]
+    patch_avg=tf.reduce_sum(get_patches_1(pred, adj), axis=1) #[x_size,3]
     
     laplace = tf.subtract(pred, tf.multiply(patch_avg, adj_weights))
     

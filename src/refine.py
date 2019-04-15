@@ -38,7 +38,7 @@ lap_loss=laplace_loss(output, X_adj,X_add_idx)
 # lap_loss_c=laplace_loss_cascade(X, output, X_adj, X_add_idx)
 
 
-total_loss= mesh_loss
+total_loss= mesh_loss+10*lap_loss
 # total_loss=mesh_loss+lap_loss
 
 optimizer = tf.train.AdamOptimizer(0.001).minimize(total_loss)
@@ -74,7 +74,7 @@ with tf.Session(config=config)as sess:
         saver.restore(sess, var_file)  # 从模型中恢复最新变量
 
     epochs=100000
-    min_loss=1000000
+    min_loss=10000
     feed_in = {X: x,
                X_adj:x_adj,
                X_add_idx:x_add_idx,
