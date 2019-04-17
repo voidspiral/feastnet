@@ -5,7 +5,7 @@ import tensorflow as tf
 import numpy as np
 from src.data_process import get_training_data
 from src.loss import mesh_loss, laplace_loss, test_loss, laplace_loss_cascade, mask_output
-from src.model import get_model_fill
+from src.model import get_model_fill, get_model_res
 
 BATCH_SIZE = 1
 
@@ -38,12 +38,12 @@ lap_loss=laplace_loss(output, X_adj,X_add_idx)
 # lap_loss_c=laplace_loss_cascade(X, output, X_adj, X_add_idx)
 
 
-total_loss= mesh_loss+10*lap_loss
+total_loss= mesh_loss+100*lap_loss
 # total_loss=mesh_loss+lap_loss
 
 optimizer = tf.train.AdamOptimizer(0.001).minimize(total_loss)
 
-data_path = 'F:/tf_projects/3D/FeaStNet-master/data'
+data_path = 'F:/tf_projects/3D/FeaStNet-master/data/rabbit'
 ckpt_path='F:/tf_projects/3D/FeaStNet-master/ckpt'
 annotation_path={
     'x':data_path+'/x.txt',
@@ -74,7 +74,7 @@ with tf.Session(config=config)as sess:
         saver.restore(sess, var_file)  # 从模型中恢复最新变量
 
     epochs=100000
-    min_loss=10000
+    min_loss=1000000
     feed_in = {X: x,
                X_adj:x_adj,
                X_add_idx:x_add_idx,
@@ -87,13 +87,11 @@ with tf.Session(config=config)as sess:
     for epoch in range(epochs):
     
         _,loss,Chamfer_loss1,edge_loss1,normal_loss1,lap_loss1,\
-        nod1,nod2,e_idx,e_len,var\
             =sess.run([optimizer,
                         total_loss,Chamfer_loss,edge_loss,normal_loss,lap_loss,
-                       dbg_list[0],dbg_list[1],dbg_list[2],dbg_list[3],dbg_list[4]
+                       
                        ],
                        feed_dict=feed_in)
-        edge_len=np.reshape(e_len,[-1,1])
         if epoch%50==0:
             if  loss< min_loss:
                 min_loss=loss

@@ -74,14 +74,9 @@ def mesh_loss(pred, p_idx, p_edge_idx,gt_nm, ground_truth):
     p_edge = tf.subtract(p_nod1, p_nod2)
     # edge length loss [add_edge]
     edge_length = tf.reduce_sum(tf.square(p_edge), 1) #[add_edge]
-    debug_log.append(p_nod1)
-    debug_log.append(p_nod2)
-    debug_log.append(p_edge_idx)
-    debug_log.append(edge_length)
     mean, var = tf.nn.moments(edge_length,axes=[0])
     edge_loss=mean+10*var
     # edge_loss=mean
-    debug_log.append(var)
 
 
     # params.shape[:axis] + indices.shape +params.shape[axis + 1:]
@@ -96,7 +91,7 @@ def mesh_loss(pred, p_idx, p_edge_idx,gt_nm, ground_truth):
     cosine = tf.abs(tf.reduce_sum(tf.multiply(unit(p_q_Normal), unit(p_edge)), 1))
     normal_loss = tf.reduce_mean(cosine)
     
-    total_loss = Chamfer_loss  + 5*edge_loss  + 0.01*normal_loss
+    total_loss = Chamfer_loss  + 100*edge_loss  + 10*normal_loss
     return total_loss,Chamfer_loss,edge_loss,normal_loss,debug_log
 
 

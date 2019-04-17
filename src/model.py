@@ -6,6 +6,9 @@ import time
 import h5py
 
 # from src.train import  COARSEN_LEVEL
+from tensorflow.contrib import slim
+
+from src.my_batch_norm import bn_layer_top
 
 random_seed=0
 def weight_variable(shape):
@@ -148,7 +151,8 @@ def get_patches_2(x, adj):
     return patches
 
 
-def custom_conv2d(x, adj, out_channels, M, ring,translation_invariance=True,scope=''):
+def custom_conv2d(x, adj, out_channels, M, ring,
+                  translation_invariance=True,scope=''):
     if translation_invariance == True:
         with tf.variable_scope(scope):
             print("Translation-invariant\n")
@@ -237,7 +241,7 @@ def custom_conv2d(x, adj, out_channels, M, ring,translation_invariance=True,scop
         patches = tf.multiply(adj_size, patches)
         # Add add elements for all m
         patches = tf.reduce_sum(patches, axis=2)
-        # [batch_size, input_size, out]
+        # [ N, out_channel]
         patches = patches + b
         return patches
 
@@ -291,13 +295,49 @@ def get_model_fill(x, adj):
     """
     # batch_size, input_size, out_channels
     x = tf.nn.relu(custom_lin(x,  16,scope='lin1'))
-    h_dims=[32,32,64,64,128,128,256]
+    h_dims=[16,16,32,64,64,128]
     
     for dim in h_dims:
-        x=tf.nn.relu(custom_conv2d(x,  adj, dim, M=9,ring=2,scope='conv1'))
+        x=tf.nn.relu(custom_conv2d(x,  adj, dim, M=9,ring=1,scope='conv1'))
     y_conv = custom_conv2d(x, adj, 3, M=9,ring=1,scope='conv4')
     return y_conv
 
+
+def get_model_res(x, adj):
+    """
+    x = tf.placeholder(tf.float32, shape=[BATCH_SIZE, NUM_POINTS, IN_CHANNELS])
+    adj = tf.placeholder(tf.int32, shape=[BATCH_SIZE, NUM_POINTS, K])
+
+    0 - input(3) - LIN(16) - CONV(32) - CONV(64) - CONV(128) - LIN(1024) - Output(50)
+    """
+    x= tf.nn.relu(custom_conv2d(x, adj, 32, M=9, ring=1, scope='conv1'))
+
+    x = slim.repeat(x, 7, block16, scale=0.17,adj=adj)
+    y_conv = custom_conv2d(x, adj, 3, M=9,ring=1,scope='output')
+
+    return y_conv
+
+
+def block16(net, adj, scale=1.0, scope=None, reuse=None):
+    """Builds the 16x16 resnet block."""
+    with tf.variable_scope(scope, 'Block16', [net], reuse=reuse):
+        with tf.variable_scope('Branch_0'):
+            b1 = tf.nn.relu(custom_lin(net, 32, scope='lin1'))
+        with tf.variable_scope('Branch_1'):
+            x = tf.nn.relu(custom_lin(net, 32, scope='lin2'))
+            b2 = tf.nn.relu(custom_conv2d(x, adj, 48, M=9, ring=1, scope='conv2'))
+        with tf.variable_scope('Branch_2'):
+            x = tf.nn.relu(custom_lin(net, 32, scope='lin3'))
+            x = tf.nn.relu(custom_conv2d(x, adj, 48, M=9, ring=1, scope='conv31'))
+            b3 = tf.nn.relu(custom_conv2d(x, adj, 64, M=9, ring=1, scope='conv32'))
+        mixed = tf.concat(axis=1, values=[b1, b2, b3])
+        up = custom_conv2d(mixed, adj, 32, M=9, ring=1, scope='conv4')
+        scaled_up = up * scale
+        scaled_up = tf.clip_by_value(scaled_up, -6.0, 6.0)
+        
+        net += scaled_up
+        net = tf.nn.relu(net)
+    return net
 
 
 def get_model_original(x, adj, num_classes):
