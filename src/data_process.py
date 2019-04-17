@@ -107,7 +107,8 @@ def output(annotation_path):
     
     
 if __name__ == '__main__':
-    root_data_path = 'F:/tf_projects/3D/FeaStNet-master/data/rabbit'
+    root_data_path = 'F:/ProjectData/surface/rabbit/2aitest/Bunnyr1'
+    # root_data_path = 'F:/tf_projects/3D/FeaStNet-master/data/rabbit'
     annotation_path = {
         'x': root_data_path + '/x.txt',
         'adj': root_data_path + '/x_adj.txt',
@@ -118,7 +119,7 @@ if __name__ == '__main__':
         
     }
 
-    x, x_adj, x_add_idx, x_add_edge, y, y_nm, mask = get_training_data(annotation_path)
+    # x, x_adj, x_add_idx, x_add_edge, y, y_nm, mask = get_training_data(annotation_path)
     
-    # output(annotation_path)
+    output(annotation_path)
 
