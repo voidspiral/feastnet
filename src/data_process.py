@@ -3,58 +3,25 @@ import os
 import numpy as np
 from trimesh import grouping,remesh
 
-def get_training_data(root_path, load_previous=True):
-    load_path= root_path + '/train.npz'
-    if load_previous == True and os.path.isfile(load_path):
-        data = np.load(load_path)
-        print('Loading training data from ' + load_path)
-        return data['X'], data['Adj'], data['Pidx'],data['Pedge'], \
-               data['Y'], data['Ynm'], data['Mask']
-
-    sample_dir=os.listdir(root_path)
-    x_list=[]
-    adj_list=[]
-    p_idx_list=[]
-    p_edge_list=[]
-    y_list=[]
-    y_nm_list=[]
-    mask_list=[]
+def get_training_data(annotation_path, data_path=None,load_previous=False):
+    if load_previous == True and os.path.isfile(data_path):
+        data = np.load(data_path)
+        print('Loading training data from ' + data_path)
+        return data['x'], data['adj'], data['y']
     
-    for sample in sample_dir:
-        sample_path=os.path.join(root_path, sample)
-        if os.path.isdir(sample_path):
-            x=np.loadtxt(os.path.join(sample_path,'x.txt'))[:,1:].astype(np.float32)
-            adj=np.loadtxt(os.path.join(sample_path,'x_ad.txt'))[:,1:11].astype(np.int32)
-            p_idx=np.loadtxt(os.path.join(sample_path,'x_add_idx.txt')).astype(np.int32)
-            
-            p_adj = adj[p_idx - 1]
-            p_edge = extract_edge(p_idx, p_adj)
-            mask = build_mask(x.shape[0], p_idx)
+    x = np.loadtxt(annotation_path['x'])[:,1:].astype(np.float32)
+    x_adj = np.loadtxt(annotation_path['adj'])[:,1:11].astype(np.int32)
+    x_add_idx = np.loadtxt(annotation_path['add_index']).astype(np.int32)
+    x_add_adj=x_adj[x_add_idx-1]
+    x_add_edge=extract_edge(x_add_idx,x_add_adj)
+    mask=build_mask(x.shape[0],x_add_idx)
     
-            y_nm=np.loadtxt(os.path.join(sample_path,'y_normal.txt')).astype(np.float32)
-            y = y_nm[:, :3]
-            y_nm=y_nm[:,3:]
-            
-            x_list.append(x)
-            adj_list.append(adj)
-            p_idx_list.append(p_idx)
-            p_edge_list.append(p_edge)
-            y_list .append(y)
-            y_nm_list .append(y_nm)
-            mask_list .append(mask)
     
-    X=np.array(x_list)
-    Adj=np.array(adj_list)
-    Pidx=np.array(p_idx_list)
-    Pedge=np.array(p_edge_list)
-    Y=np.array(y_list)
-    Ynm=np.array(y_nm_list)
-    Mask=np.array(mask_list)
-    if not load_previous:
-        np.savez(load_path, X=X, Adj=Adj, Pidx=Pidx, Pedge=Pedge,
-                 Y=Y, Ynm=Ynm,Mask=Mask)
-
-    return X,Adj,Pidx,Pedge,Y,Ynm,Mask
+    y_nm = np.loadtxt(annotation_path['y_normal'])
+    y=y_nm[:,:3]
+    y_nm=y_nm[:,3:]
+    
+    return x,x_adj,x_add_idx,x_add_edge,y,y_nm,mask
     
 def build_mask(num,x_add_idx):
     mask=np.zeros([num])
@@ -140,10 +107,18 @@ def output(annotation_path):
     
     
 if __name__ == '__main__':
-    train_data_path = 'F:/ProjectData/surface/rabbit/2aitest'
+    root_data_path = 'F:/tf_projects/3D/FeaStNet-master/data/rabbit'
+    annotation_path = {
+        'x': root_data_path + '/x.txt',
+        'adj': root_data_path + '/x_adj.txt',
+        'add_index': root_data_path + '/x_add_idx.txt',
+        'y_normal': root_data_path + '/y_normal.txt',
+        'output': root_data_path + '/output.txt',
+        'p_output': root_data_path + '/p_output.txt'
+        
+    }
 
-    x, adj, pidx, pedge, y, ynm, mask = get_training_data(train_data_path,
-                                                          data_path=train_data_path, load_previous=False)
-
+    x, x_adj, x_add_idx, x_add_edge, y, y_nm, mask = get_training_data(annotation_path)
+    
     # output(annotation_path)
 
