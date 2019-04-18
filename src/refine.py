@@ -37,7 +37,7 @@ lap_loss = laplace_loss(output, Adj, Pidx)
 # lap_loss_c=laplace_loss_cascade(X, output, X_adj, X_add_idx)
 
 
-total_loss = mesh_loss + 100 * lap_loss
+total_loss = mesh_loss +  lap_loss
 # total_loss=mesh_loss+lap_loss
 
 optimizer = tf.train.AdamOptimizer(0.001).minimize(total_loss)
