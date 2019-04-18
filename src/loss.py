@@ -1,6 +1,6 @@
 import tensorflow as tf
 
-from src.model import get_patches_1
+from src.model import get_patches_1, batch_gather
 
 
 def get_generate(whole_output, hole_x):
@@ -31,30 +31,35 @@ def mask_output(pred,X,mask):
 
     pred=tf.cond(mask,then_expression_fn,else_expression_fn)
     return pred
-def mesh_loss(pred, p_idx, p_edge_idx,gt_nm, ground_truth):
+
+
+def mesh_loss(pred, p_idx, p_edge_idx,gt_nm, ground_truth,p_num):
     '''
     
-    :param pred:  [x_size,3]
-    :param gt_nm:  [true_hole_size,3]
-    :param p_edge_idx:  [add_edge,2]
-    :param ground_truth: [true_hole_size,3]
-    :param min_q_idx: [add_size]
+    :param pred:[batch_size,x_size,3]
+    :param p_idx:[batch_size,p_size]
+    :param p_edge_idx:[batch_size,p_edge_size,2]
+    :param gt_nm:[batch_size,q_size,3]
+    :param ground_truth:[batch_size,q_size,3]
+    :param p_num:[batch_size]
     :return:
     '''
     debug_log=[]
     # Chamfer_loss
 
-    # [x_size, 1, 3]
-    pred1 = tf.expand_dims(pred, axis=1)
-    # [1, y_size,  3]
-    ground_truth = tf.expand_dims(ground_truth, axis=0)
-    # [x_size,y_size]
+    # [batch_size,x_size, 1, 3]
+    pred1 = tf.expand_dims(pred, axis=2)
+    # [batch_size,1, y_size,  3]
+    ground_truth = tf.expand_dims(ground_truth, axis=1)
+    # [batch_size,x_size,y_size]
     distance_matrix = tf.reduce_sum(tf.square(pred1 - ground_truth), axis=-1)
-    # [x_size] from 0
-    min_q_idx = tf.argmin(distance_matrix, axis=1)
+    # [batch_size,x_size] from 0
+    min_q_idx = tf.argmin(distance_matrix, axis=2)
     
 
-    p_distance = tf.reduce_min(distance_matrix, axis=1) #[x_size]
+    p_distance = tf.reduce_min(distance_matrix, axis=2) #[batch_size,x_size]
+    
+    p_distance=batch_gather(p_distance, p_idx)#[p_size]
     p_distance=tf.gather(p_distance, p_idx - 1)#[p_size]
     p_distance=tf.reduce_sum(p_distance) #[]
 
