@@ -10,9 +10,7 @@ from tensorflow.contrib import slim
 
 from src.my_batch_norm import bn_layer_top
 
-random_seed = 0
-
-
+random_seed=0
 def weight_variable(shape):
     initial = tf.truncated_normal(shape, stddev=0.1, seed=random_seed)
     return tf.Variable(initial)
@@ -65,20 +63,20 @@ def get_weight_assigments(x, adj, u, v, c):
     return patches
 
 
-def get_weight_assigments_translation_invariance(x, adj, u, c, ring):
+def get_weight_assigments_translation_invariance(x, adj, u, c,ring):
     # u.shape=[M, in_channels]
     
     M, in_channels = u.get_shape().as_list()
     # [N, K, ch]
-    K, patches = get_patches(x, adj, ring)
+    K,patches=get_patches(x, adj, ring)
     # [ N, ch, 1]
     x = tf.reshape(x, [-1, in_channels, 1])
     # [ N, ch, K]
-    patches = tf.transpose(patches, [0, 2, 1])
+    patches = tf.transpose(patches, [0, 2,1])
     # [N, ch, K]
     patches = tf.subtract(x, patches)  # invariance
     # [ch, N, K]
-    patches = tf.transpose(patches, [1, 0, 2])
+    patches = tf.transpose(patches, [1,0,2])
     # [ch, N*K]
     x_patches = tf.reshape(patches, [in_channels, -1])
     #  M, N*K  = [M, ch]  x  [ch, N*K]
@@ -86,11 +84,11 @@ def get_weight_assigments_translation_invariance(x, adj, u, c, ring):
     # M, N, K
     patches = tf.reshape(patches, [M, -1, K])
     # [K, N, M]
-    patches = tf.transpose(patches, [2, 1, 0])
+    patches = tf.transpose(patches, [2, 1,0])
     # [K, N, M]
     patches = tf.add(patches, c)
     # N, K, M
-    patches = tf.transpose(patches, [1, 0, 2])
+    patches = tf.transpose(patches, [1,0,2])
     patches = tf.nn.softmax(patches)
     return patches
 
@@ -105,18 +103,16 @@ def get_patches_1(x, adj):
     num_points, in_channels = x.get_shape().as_list()
     zeros = tf.zeros([1, in_channels], dtype=tf.float32)
     # 索引为0的邻接点，会索引到 0,0
-    x = tf.concat([zeros, x], 0)  # [N+1, C]
-    patches = tf.gather(x, adj)  # [N,K,C]
+    x = tf.concat([zeros, x], 0) #[N+1, C]
+    patches = tf.gather(x, adj) #[N,K,C]
     return patches
 
-
-def get_patches(x, adj, ring_num):
+def get_patches(x,adj,ring_num):
     K = adj.get_shape()[1]
-    if ring_num == 1:
-        return K, get_patches_1(x, adj)
-    elif ring_num == 2:
-        return K * K, get_patches_2(x, adj)
-
+    if ring_num==1:
+        return K,get_patches_1(x,adj)
+    elif ring_num==2:
+        return K*K,get_patches_2(x,adj)
 
 def get_patches_2(x, adj):
     '''
@@ -127,36 +123,36 @@ def get_patches_2(x, adj):
     '''
     num_points, in_channels = x.get_shape().as_list()
     input_size, K = adj.get_shape().as_list()
-    zeros = tf.zeros([1, in_channels], dtype=tf.float32)
+    zeros = tf.zeros([ 1, in_channels], dtype=tf.float32)
     # 索引为0的邻接点，会索引到 0,0
-    x = tf.concat([zeros, x], 0)  # [num_points+1, in_channels]
+    x = tf.concat([zeros, x], 0) #[num_points+1, in_channels]
     
     ############### 2-ring
-    zeros_adj = tf.zeros([1, K], dtype=tf.int32)
+    zeros_adj = tf.zeros([ 1, K], dtype=tf.int32)
     _adj = tf.concat([zeros_adj, adj], 0)  # [num_points+1 , K]
     
     patches_adj = tf.gather(_adj, adj)  # [num_points,K,K]
-    K2 = K * K
+    K2=K*K
     patches_adj = tf.reshape(patches_adj, [-1, K2])
     
-    def cut_nodes(i, x):
+    def cut_nodes(i,x):
         y, idx = tf.unique(x)
-        z = tf.boolean_mask(y, tf.not_equal(y, i))
+        z=tf.boolean_mask(y,tf.not_equal(y,i))
         paddings = [[0, K2 - tf.shape(z)[0]]]
         z = tf.pad(z, paddings)
         return z
     
     # [num_points,K2] adj_2 need to save in numpy
-    adj_2 = tf.map_fn(lambda x: cut_nodes(x[0], x[1]),
-                      (tf.range(tf.shape(patches_adj)[0]) + 1, patches_adj),
+    adj_2 = tf.map_fn(lambda x: cut_nodes(x[0],x[1]),
+                      (tf.range(tf.shape(patches_adj)[0])+1,patches_adj),
                       dtype=tf.int32)
     patches = tf.gather(x, adj_2)  # [num_points,K2,in_channels]
-    
+
     return patches
 
 
 def custom_conv2d(x, adj, out_channels, M, ring,
-                  translation_invariance=True, scope=''):
+                  translation_invariance=True,scope=''):
     if translation_invariance == True:
         with tf.variable_scope(scope):
             print("Translation-invariant\n")
@@ -174,15 +170,15 @@ def custom_conv2d(x, adj, out_channels, M, ring,
             # [N, 1, 1]
             adj_size = tf.reshape(adj_size, [-1, 1, 1])
             # [N, K, M] 当K index 到 0 时， M 维相等
-            q = get_weight_assigments_translation_invariance(x, adj, u, c, ring)
+            q = get_weight_assigments_translation_invariance(x, adj, u, c,ring)
             # [C, N]
-            x = tf.transpose(x, [1, 0])
+            x = tf.transpose(x, [1,0])
             # [M*O,C]
             W = tf.reshape(W, [M * out_channels, in_channels])  # 卷积核参数
             # [M*O, N]
             wx = tf.matmul(W, x)  # 卷积
             # [N, M*O]
-            wx = tf.transpose(wx, [1, 0])
+            wx = tf.transpose(wx, [1,0])
             # adj中k为0的索引取到的 wx 也为0
             # [N, K, M*O]
             K, patches = get_patches(wx, adj, ring)
@@ -204,9 +200,9 @@ def custom_conv2d(x, adj, out_channels, M, ring,
             patches = tf.reduce_sum(patches, axis=1)
             # [N, O]
             patches = patches + b
-            
+
             return patches
-    
+
     else:
         batch_size, input_size, in_channels = x.get_shape().as_list()
         W = weight_variable([M, out_channels, in_channels])
@@ -250,13 +246,15 @@ def custom_conv2d(x, adj, out_channels, M, ring,
         return patches
 
 
-def custom_lin(input, out_channels, scope):
+
+def custom_lin(input, out_channels,scope):
     # 可以理解为升降维 1x1 Conv, 只对input最后一维进行 全连接
     with tf.variable_scope(scope):
+
         input_size, in_channels = input.get_shape().as_list()
         W = weight_variable([in_channels, out_channels])
         b = bias_variable([out_channels])
-        return tf.matmul(input, W) + b
+        return tf.matmul(input, W)+b
 
 
 def custom_max_pool(input, kernel_size, stride=[2, 2], padding='VALID'):
@@ -287,27 +285,22 @@ def perm_data(input, indices):
     xnew = tf.while_loop(lambda i, *args: i < Mnew, loop_body, [xnew])
     return xnew
 
-
+    
 def get_model_fill(x, adj):
     """
     x = tf.placeholder(tf.float32, shape=[BATCH_SIZE, NUM_POINTS, IN_CHANNELS])
     adj = tf.placeholder(tf.int32, shape=[BATCH_SIZE, NUM_POINTS, K])
-
+    
     0 - input(3) - LIN(16) - CONV(32) - CONV(64) - CONV(128) - LIN(1024) - Output(50)
     """
     # batch_size, input_size, out_channels
-    x = tf.nn.relu(custom_lin(x, 16, scope='lin1'))
-    h_dims = [16, 16, 32, 64, 64, 128]
+    x = tf.nn.relu(custom_lin(x,  16,scope='lin1'))
+    h_dims=[16,16,32,64,64,128]
     
     for dim in h_dims:
-        x = tf.nn.relu(custom_conv2d(x, adj, dim, M=9, ring=1, scope='conv1'))
-    y_conv = custom_conv2d(x, adj, 3, M=9, ring=1, scope='conv4')
+        x=tf.nn.relu(custom_conv2d(x,  adj, dim, M=9,ring=1,scope='conv1'))
+    y_conv = custom_conv2d(x, adj, 3, M=9,ring=1,scope='conv4')
     return y_conv
-
-
-def model_cascade(x, adj):
-    x = slim.repeat(x, 7, block16, scale=0.17, adj=adj)
-    output1 = custom_conv2d(x, adj, 3, M=9, ring=1, scope='output')
 
 
 def get_model_res(x, adj):
@@ -317,9 +310,12 @@ def get_model_res(x, adj):
 
     0 - input(3) - LIN(16) - CONV(32) - CONV(64) - CONV(128) - LIN(1024) - Output(50)
     """
-    x = tf.nn.relu(custom_conv2d(x, adj, 32, M=9, ring=1, scope='conv1'))
-    
-    return y_conv, x
+    x= tf.nn.relu(custom_conv2d(x, adj, 32, M=9, ring=1, scope='conv1'))
+
+    x = slim.repeat(x, 7, block16, scale=0.17,adj=adj)
+    y_conv = custom_conv2d(x, adj, 3, M=9,ring=1,scope='output')
+
+    return y_conv
 
 
 def block16(net, adj, scale=1.0, scope=None, reuse=None):
@@ -374,8 +370,7 @@ def get_model_original(x, adj, num_classes):
     y_conv = custom_lin(h_fc1, num_classes)
     return y_conv
 
-
-COARSEN_LEVEL = 2
+COARSEN_LEVEL=2
 
 
 def get_model(x, adj, perms, num_classes, architecture):
