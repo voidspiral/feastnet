@@ -13,28 +13,28 @@ BATCH_SIZE = 1
 X = tf.placeholder(tf.float32, shape=[None, 3])
 Mask = tf.placeholder(tf.bool, shape=[None])
 # [ coarse_total_size,10]
-X_adj = tf.placeholder(tf.int32, shape=[None, 10])
+Adj = tf.placeholder(tf.int32, shape=[None, 10])
 
 # [ coarse_fill_size]
-X_add_idx= tf.placeholder(tf.int32, shape=[None])
+Pidx= tf.placeholder(tf.int32, shape=[None])
 # [ coarse_fill_edge_size,2]
-X_add_edge=tf.placeholder(tf.int32, shape=[None, 2])
+Pedge=tf.placeholder(tf.int32, shape=[None, 2])
 
 # [true_hole_size,3]
 Y= tf.placeholder(tf.float32, shape=[None, 3])
 # [true_hole_size,3]
-Y_nm=tf.placeholder(tf.float32, shape=[None, 3])
+Ynm=tf.placeholder(tf.float32, shape=[None, 3])
 
 
 #[input_size,3]
-output = get_model_fill(X,  X_adj)
+output = get_model_fill(X, Adj)
 
 # loss=tf.reduce_mean(tf.square(X-output))
 size=tf.shape(output)
 output=tf.where(Mask, output, X)
 
-mesh_loss,Chamfer_loss,edge_loss,normal_loss,dbg_list= mesh_loss(output, X_add_idx,X_add_edge, Y_nm, Y)
-lap_loss=laplace_loss(output, X_adj,X_add_idx)
+mesh_loss,Chamfer_loss,edge_loss,normal_loss,dbg_list= mesh_loss(output, Pidx, Pedge, Ynm, Y)
+lap_loss=laplace_loss(output, Adj, Pidx)
 # lap_loss_c=laplace_loss_cascade(X, output, X_adj, X_add_idx)
 
 
@@ -43,20 +43,15 @@ total_loss= mesh_loss+100*lap_loss
 
 optimizer = tf.train.AdamOptimizer(0.001).minimize(total_loss)
 
-data_path = 'F:/tf_projects/3D/FeaStNet-master/data/rabbit'
+train_data_path = 'F:/ProjectData/surface/rabbit/2aitest'
 ckpt_path='F:/tf_projects/3D/FeaStNet-master/ckpt'
-annotation_path={
-    'x':data_path+'/x.txt',
-    'adj':data_path+'/x_adj.txt',
-    'add_index':data_path+'/x_add_idx.txt',
-    'y_normal':data_path+'/y_normal.txt'
-    
-}
-x, x_adj, x_add_idx,x_add_edge, y, y_nm,mask=get_training_data(annotation_path)
+x, adj, pidx,pedge, y, ynm,mask=\
+    get_training_data(train_data_path,load_previous=True)
+# x, adj, pidx,pedge, y, ynm,mask=get_training_data(annotation_path)
 
-# dir_load = '/20190312-1528'  # where to restore the model
-dir_load =None
-model_name = 'model.ckpt-59'
+dir_load = '20190418-1138'  # where to restore the model
+# dir_load =None
+model_name = 'model.ckpt-430'
 
 saver = tf.train.Saver()
 
@@ -75,38 +70,33 @@ with tf.Session(config=config)as sess:
 
     epochs=100000
     min_loss=1000000
-    feed_in = {X: x,
-               X_adj:x_adj,
-               X_add_idx:x_add_idx,
-               X_add_edge:x_add_edge,
-               Mask:mask,
-               Y:y,
-               Y_nm:y_nm,
-               }
     
     for epoch in range(epochs):
-    
-        _,loss,Chamfer_loss1,edge_loss1,normal_loss1,lap_loss1,\
-            =sess.run([optimizer,
-                        total_loss,Chamfer_loss,edge_loss,normal_loss,lap_loss,
-                       
-                       ],
-                       feed_dict=feed_in)
-        if epoch%50==0:
+        for x_, adj_, pidx_,pedge_, y_, ynm_,mask_ in zip(x, adj, pidx,pedge, y, ynm,mask):
+        
+            feed_in = {X: x_,
+                       Adj: adj_,
+                       Pidx: pidx_,
+                       Pedge: pedge_,
+                       Y: y_,
+                       Ynm: ynm_,
+                       Mask: mask_,
+                       }
+        
+            _,loss,Chamfer_loss1,edge_loss1,normal_loss1,lap_loss1,\
+                =sess.run([optimizer,
+                            total_loss,Chamfer_loss,edge_loss,normal_loss,lap_loss,
+                           
+                           ],
+                           feed_dict=feed_in)
+        if epoch%1==0:
             if  loss< min_loss:
                 min_loss=loss
                 print('save ckpt\n')
-                saver.save(sess, save_checkpoints_dir+"/model.ckpt", global_step=int(epoch/50))
+                saver.save(sess, save_checkpoints_dir+"/model.ckpt", global_step=int(epoch))
 
             print('epoch = %d \nloss=%.4f\nChamfer_loss=%.4f\nedge_loss=%.4f\nnormal_loss=%.4f\nlap_loss=%.4f\n'
                   %(epoch,loss,Chamfer_loss1,edge_loss1,normal_loss1,lap_loss1))
 
             print('===============')
     
-    
-    output_array= sess.run(output,feed_dict=feed_in)
-    np.savetxt(data_path+'/data.txt',output_array,fmt='%.5f')
-
-    idx_array=np.concatenate([np.expand_dims(x_add_idx,1),output_array[x_add_idx-1]],axis=1)
-    np.savetxt(data_path+'/p_output.txt',idx_array,fmt='%.5f')
-    exit()

@@ -302,7 +302,12 @@ def get_model_fill(x, adj):
     y_conv = custom_conv2d(x, adj, 3, M=9,ring=1,scope='conv4')
     return y_conv
 
+def model_cascade(x,adj):
+    x = slim.repeat(x, 7, block16, scale=0.17,adj=adj)
+    output1 = custom_conv2d(x, adj, 3, M=9,ring=1,scope='output')
+    
 
+    
 def get_model_res(x, adj):
     """
     x = tf.placeholder(tf.float32, shape=[BATCH_SIZE, NUM_POINTS, IN_CHANNELS])
@@ -312,10 +317,8 @@ def get_model_res(x, adj):
     """
     x= tf.nn.relu(custom_conv2d(x, adj, 32, M=9, ring=1, scope='conv1'))
 
-    x = slim.repeat(x, 7, block16, scale=0.17,adj=adj)
-    y_conv = custom_conv2d(x, adj, 3, M=9,ring=1,scope='output')
 
-    return y_conv
+    return y_conv,x
 
 
 def block16(net, adj, scale=1.0, scope=None, reuse=None):
