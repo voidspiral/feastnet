@@ -2,7 +2,7 @@ import os
 
 import numpy as np
 from trimesh import grouping, remesh
-
+from collections import Counter
 
 def get_training_data(root_path, load_previous=True):
     load_path = root_path + '/train.npz'
@@ -110,8 +110,16 @@ def subdivide(vertice_num,
     mid_idx = (np.arange(len(face_index) * 3)).reshape((3, -1)).T
     # 新增点为 len(unique)=num_edge 个。  mid[unique] 就是所有新增点,
     # 新增点的id: vertice_num ~ vertice_num+len(unique)
-    # [uniq] [3*f]. unique 的每个值代表一个不重复的新中点在所有中点中的索引
+    # [num_edge] [3*f]. unique 的每个值代表一个不重复的新中点在所有中点中的索引
     unique, inverse = grouping.unique_rows(mid)
+    idx=[id for id, v in Counter(inverse).items() if v==1]
+    mar_id=idx+vertice_num # 边缘点的 id
+    mar_edges=mid[unique[idx]] #[mar_num,2]
+    mar_pos_in_f =unique[idx]//len(face_index)  #[margin_num]
+    mar_f_id=unique[idx] %  len(face_index) #[margin_num]
+    
+
+
     # [f,3] 新face关于 新点的索引
     mid_idx = inverse[mid_idx] + vertice_num
 
