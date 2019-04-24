@@ -42,14 +42,14 @@ total_loss = mesh_loss +  lap_loss
 
 optimizer = tf.train.AdamOptimizer(0.001).minimize(total_loss)
 
-train_data_path = 'F:/ProjectData/surface/rabbit/2aitest'
+train_data_path = 'F:/ProjectData/surface/leg'
 ckpt_path = 'F:/tf_projects/3D/FeaStNet-master/ckpt'
 x, adj, pidx, pedge, y, ynm, mask = \
     get_training_data(train_data_path, load_previous=True)
 # x, adj, pidx,pedge, y, ynm,mask=get_training_data(annotation_path)
 
-dir_load = '20190418-1138'  # where to restore the model
-# dir_load =None
+# dir_load = '20190418-1138'  # where to restore the model
+dir_load =None
 model_name = 'model.ckpt-430'
 
 saver = tf.train.Saver()

@@ -3,7 +3,7 @@ import numpy as np
 from src.data_process import get_training_data
 from src.model import get_model_fill
 
-data_path = 'F:/ProjectData/surface/test'
+data_path = 'F:/ProjectData/surface/new'
 # [ coarse_total_size,3]
 X = tf.placeholder(tf.float32, shape=[None, 3])
 # [ coarse_total_size,10]
