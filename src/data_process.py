@@ -169,10 +169,10 @@ def subdivide(vertice_num,
 #     return pairs
 
 
-def extract_face(faces, p_idx, mar_pt, mar_nb, mar_f_id):
+def extract_face(faces, p_idx, mar_pt, mar_nb):
     '''
     
-    :param faces: f,3,2
+    :param faces: f,3
     :param p_idx: n
     :param mar_pt:
     :param mar_nb: m,2
@@ -180,6 +180,10 @@ def extract_face(faces, p_idx, mar_pt, mar_nb, mar_f_id):
     :return:
     '''
     #edge-->adj
+    #[f,3,2]
+    edges = np.stack([faces[:, g]
+                      for g in [[0, 1], [1, 0],
+                                [1, 2]]],axis=1)
 
     #[f(x) if condition else g(x) for x in sequence]
     mar_nb= mar_nb[:, [1, 0]]
@@ -188,58 +192,41 @@ def extract_face(faces, p_idx, mar_pt, mar_nb, mar_f_id):
     # (faces == mar_nb).all(axis=-1)#[f,3,m]
     
     mar_nb=np.reshape(mar_nb,[-1,1,1,2]) #[m,1,1,2]
-    mar_f=(faces == mar_nb).all(axis=-1)  # [m,f,3] bool
-    #[m] [m] [m]
-    n_idx,f_idx,e_idx=np.where(mar_f)
-    mask=~mar_f[n_idx,f_idx,:]   #[m,3]
-    mask=np.stack([mask,mask],axis=-1) #[m,3,2]
-    m_faces=faces[f_idx] #[m,3,2]
-    other2edge = np.ma.compressed(np.ma.MaskedArray(m_faces, mask)).reshape([-1,2,2]) #[m,2,2]
-    other2edge[:,]
+    mar_e=(edges == mar_nb).all(axis=-1)  # [m,f,3] bool 只有m个值为 True
+    mar_f=mar_e.any(axis=-1)  # [m,f] bool 只有m个值为 True
+    mar_f_ne=np.expand_dims(mar_f,-1)*~mar_e # [m,f,3] bool  有2m个值为 True
     
-    # https://stackoverflow.com/questions/42557558/how-to-delete-specific-values-from-numpy-ndarray
-    # https://stackoverflow.com/questions/38193958/how-to-properly-mask-a-numpy-2d-array
+    #[2m] [2m] [2m]
+    n_idx,f_idx,e_idx=np.where(mar_f_ne)
+    mar_ne=edges[f_idx,e_idx,:].reshape([mar_num,2,2]) #[m,2,2]
+    mar_ne1=mar_ne[:,0,:] #[m,2]
+    mar_ne2=mar_ne[:,1,:] #[m,2]
+    mar_ne2=mar_ne2[:,:,[1,0]] #[m,2]
+    mask=np.where((mar_ne1-mar_ne2)==0)[0] #[m]
+    mar_op_pt=mar_ne1[np.arange(mar_num),mask] #[m]
     
-    mask=np.ones([mar_num,3])
-    mask[np.arange(mar_num),e_idx]=0 #[m,3]
-    faces[f_idx] #[m,3,2]
     
     # # 只剩下一个face 和一个 margin对应，即洞外face
-    # mar_f[np.arange(mar_f.shape[0]),mar_f_id,:]=False # [m,f,3]
     # # 分割出 两个 新平面
     
+    split_faces1=np.stack([mar_nb[:,0],mar_pt,mar_op_pt],axis=-1) #[m,3]
+    split_faces2=np.stack([mar_nb[:,1],mar_op_pt,mar_pt],axis=-1) #[m,3]
+    split_faces=np.concatenate([split_faces1,split_faces2]) #[2*m,3]
+    faces=np.concatenate([faces,split_faces]) #[f+2m,3]
     
-    
-    
-    
-
-    edges = np.stack([faces[:, g]
+    # [2*m,3,2]
+    split_edges = np.stack([split_faces[:, g]
                       for g in [[0, 1], [1, 0],
-                                [1, 2]]])
-
-        
-        
-        
-
-    
-                
-    
+                                [1, 2]]],axis=1)
+    edges=np.concatenate([edges,split_edges]) #[f+2m,3,2]
     
     unique, inverse = grouping.unique_rows(edges)
-    
-    
-    
     edges = edges[unique]
     edges_sym=edges[:,[1,0]]
     edges=np.concatenate([edges,edges_sym])
     edges = edges[np.argsort(edges[:, 0])]
     
     unique, inverse = grouping.unique_rows(edges[:, 0])
-    ###############
-    unique[mar_pt]
-    #################
-    
-    
     
     p_unique=unique[p_idx-1]
     p_edges=np.stack([edges[st:ed]
@@ -248,37 +235,8 @@ def extract_face(faces, p_idx, mar_pt, mar_nb, mar_f_id):
            for st, ed in zip(unique[:-1], unique[1:])]
     adj = np.stack(adj)
     
-    def get_commen_neigb(pt1,pt2):
-        '''
-        
-        :param adj1: [pt_num,K]
-        :param adj2: [pt_num,K]
-        :return: [pt_num]
-        '''
-        adj1,adj2=adj[pt1-1],adj[pt1-1]
-        for a1,a2 in zip(list(adj1),list(adj2)):
-            for id in a1:
-                if id in a2 and id!=0
-        
-        
-    np.concatenate([adj[mar_nb[:, 0] - 1], adj[mar_nb[:, 1] - 1]])
 
-    return p_edges, adj
-
-def face2edge(faces):
-    # edge-->adj
-    edges = np.stack([faces[:, g]
-                      for g in [[0, 1], [1, 0],
-                                [1, 2]]])
-    unique, inverse = grouping.unique_rows(edges)
-    edges = edges[unique]
-    edges_sym = edges[:, [1, 0]]
-    edges = np.concatenate([edges, edges_sym])
-    edges = edges[np.argsort(edges[:, 0])]
-    return edges
-
-def subdivide_repair(edges,new_mar_pt):
-    margin_opposite_pt=
+    return p_edges, adj,faces
 
 
 
