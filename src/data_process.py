@@ -91,6 +91,15 @@ def gather_from_one(x, idx):
     x = x[idx]
     return x
 
+def get_p_face_id(x_hole, face_hole, x_p, face_p):
+    face_coord1=np.sort(x_hole[face_hole].reshape([-1, 9]), axis=-1) #[n,9]
+    face_coord2=np.sort(x_p[face_p].reshape([-1, 9]), axis=-1) #[m,9] m>n
+    face_coord=np.vstack((face_coord1,face_coord2))
+    unique, inverse = grouping.unique_rows(face_coord)
+    hole_size=face_coord1.shape[0]
+    p_face_idx=np.where(inverse[hole_size:]<hole_size)
+    return p_face_idx
+    
 def subdivide(vertice_num,
               faces,
               face_idx=None):
