@@ -5,9 +5,25 @@ import tensorflow as tf
 import numpy as np
 from src.data_process import get_training_data
 from src.loss import mesh_loss, laplace_loss, test_loss, laplace_loss_cascade, mask_output
-from src.model import get_model_fill, get_model_res
+from src.model import get_model_fill
 
 BATCH_SIZE = 1
+
+placeholders = {
+    'features': tf.placeholder(tf.float32, shape=(None, 3)),
+    'img_inp': tf.placeholder(tf.float32, shape=(224, 224, 3)),
+    'labels': tf.placeholder(tf.float32, shape=(None, 6)),
+    'support1': [tf.sparse_placeholder(tf.float32) for _ in range(num_supports)],
+    'support2': [tf.sparse_placeholder(tf.float32) for _ in range(num_supports)],
+    'support3': [tf.sparse_placeholder(tf.float32) for _ in range(num_supports)],
+    'faces': [tf.placeholder(tf.int32, shape=(None, 4)) for _ in range(num_blocks)],  #for face loss, not used.
+    'edges': [tf.placeholder(tf.int32, shape=(None, 2)) for _ in range(num_blocks)],
+    'lape_idx': [tf.placeholder(tf.int32, shape=(None, 10)) for _ in range(num_blocks)], #for laplace term
+    'pool_idx': [tf.placeholder(tf.int32, shape=(None, 2)) for _ in range(num_blocks-1)] #for unpooling
+}
+
+
+
 
 # [ coarse_total_size,3]
 X = tf.placeholder(tf.float32, shape=[None, 3])

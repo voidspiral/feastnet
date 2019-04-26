@@ -155,7 +155,7 @@ def get_patches_2(x, adj):
     return patches
 
 
-def custom_conv2d(x, adj, out_channels, M, ring,
+def custom_conv2d(x, adj, out_channels, M, ring=1,
                   translation_invariance=True, scope=''):
     if translation_invariance == True:
         with tf.variable_scope(scope):
@@ -304,38 +304,41 @@ def get_model_fill(x, adj):
     y_conv = custom_conv2d(x, adj, 3, M=9, ring=1, scope='conv4')
     return y_conv
 
-
-def model_cascade(x, adj):
-    x = slim.repeat(x, 7, block16, scale=0.17, adj=adj)
-    output1 = custom_conv2d(x, adj, 3, M=9, ring=1, scope='output')
+def model(x,ad):
 
 
-def get_model_res(x, adj):
-    """
-    x = tf.placeholder(tf.float32, shape=[BATCH_SIZE, NUM_POINTS, IN_CHANNELS])
-    adj = tf.placeholder(tf.int32, shape=[BATCH_SIZE, NUM_POINTS, K])
-
-    0 - input(3) - LIN(16) - CONV(32) - CONV(64) - CONV(128) - LIN(1024) - Output(50)
-    """
-    x = tf.nn.relu(custom_conv2d(x, adj, 32, M=9, ring=1, scope='conv1'))
-    
-    return y_conv, x
+def conv_cascade(x, adj):
+    x = slim.repeat(x, 5, block,  adj=adj)
+    output = custom_conv2d(x, adj, 3, M=9, ring=1, scope='output')
+    return output
 
 
-def block16(net, adj, scale=1.0, scope=None, reuse=None):
+def unpool(x, unpool_idx):
+    # 用新点的6个邻接点中的2个原来的点进行平均
+    add_feat = (1 / 2.0) * tf.reduce_sum(tf.gather(x, unpool_idx), 1)
+    # 增加新点， 邻接表写好
+    outputs = tf.concat([x, add_feat], 0)
+    return outputs
+
+
+# def block(x,adj):
+#     x = tf.nn.relu(custom_conv2d(x, adj, 32, M=9, ring=1, scope='conv1'))
+#     return x
+
+def block(net, adj, scale=1.0, scope=None, reuse=None):
     """Builds the 16x16 resnet block."""
     with tf.variable_scope(scope, 'Block16', [net], reuse=reuse):
         with tf.variable_scope('Branch_0'):
-            b1 = tf.nn.relu(custom_lin(net, 32, scope='lin1'))
+            b1 = tf.nn.relu(custom_conv2d(net, adj, 32, M=9,  scope='conv0'))
         with tf.variable_scope('Branch_1'):
-            x = tf.nn.relu(custom_lin(net, 32, scope='lin2'))
-            b2 = tf.nn.relu(custom_conv2d(x, adj, 48, M=9, ring=1, scope='conv2'))
+            x = tf.nn.relu(custom_conv2d(net, adj, 32, M=9,  scope='conv10'))
+            b2 = tf.nn.relu(custom_conv2d(x, adj, 48, M=9,  scope='conv11'))
         with tf.variable_scope('Branch_2'):
-            x = tf.nn.relu(custom_lin(net, 32, scope='lin3'))
-            x = tf.nn.relu(custom_conv2d(x, adj, 48, M=9, ring=1, scope='conv31'))
-            b3 = tf.nn.relu(custom_conv2d(x, adj, 64, M=9, ring=1, scope='conv32'))
+            x = tf.nn.relu(custom_conv2d(net, adj, 32, M=9,  scope='conv20'))
+            x = tf.nn.relu(custom_conv2d(x, adj, 48, M=9,  scope='conv21'))
+            b3 = tf.nn.relu(custom_conv2d(x, adj, 64, M=9,  scope='conv22'))
         mixed = tf.concat(axis=1, values=[b1, b2, b3])
-        up = custom_conv2d(mixed, adj, 32, M=9, ring=1, scope='conv4')
+        up = custom_conv2d(mixed, adj, 32, M=9,  scope='conv3')
         scaled_up = up * scale
         scaled_up = tf.clip_by_value(scaled_up, -6.0, 6.0)
         

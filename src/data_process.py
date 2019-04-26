@@ -18,6 +18,7 @@ def get_training_data(root_path, load_previous=True):
     adj_list = [[]]*cas
     p_idx_list = [[]]*cas
     p_edge_list = [[]]*cas
+    new_pt_nb_list = [[]]*(cas-1)
     mask_list = [[]]*cas
     y_list = []
     y_nm_list = []
@@ -25,13 +26,15 @@ def get_training_data(root_path, load_previous=True):
     for sample in sample_dir:
         sample_path = os.path.join(root_path, sample)
         if os.path.isdir(sample_path):
-            x = np.loadtxt(os.path.join(sample_path, 'x.txt'))[:, 1:].astype(np.float32)
-            face = np.loadtxt(os.path.join(sample_path, 'face.txt'))[:, 1:].astype(np.float32)
-            face_idx = np.loadtxt(os.path.join(sample_path, 'face_idx.txt')).astype(np.int32)
+            x = np.loadtxt(os.path.join(sample_path, 'x_fill.txt')).astype(np.float32)
+            face = np.loadtxt(os.path.join(sample_path, 'face_fill.txt')).astype(np.int32)
+            x_hole = np.loadtxt(os.path.join(sample_path, 'x_hole.txt')).astype(np.float32)
+            face_hole = np.loadtxt(os.path.join(sample_path, 'face_hole.txt')).astype(np.int32)
             p_idx = np.loadtxt(os.path.join(sample_path, 'x_add_idx.txt')).astype(np.int32)
             y_nm = np.loadtxt(os.path.join(sample_path, 'y_normal.txt')).astype(np.float32)
             y = y_nm[:, :3]
             y_nm = y_nm[:, 3:]
+            p_face_idx=fill_face_id(x, face,x_hole, face_hole)
             
             for i,c in enumerate(range(cas)):
                 mar_pt=None
@@ -40,18 +43,18 @@ def get_training_data(root_path, load_previous=True):
                 if i>0:
                     
                     face, face_idx, new_pt_nb,mar_pt, mar_nb\
-                        =subdivide(vertice_num,face,face_idx)
+                        =subdivide(vertice_num,face,p_face_idx)
                     
                     new_pt_num=new_pt_nb.shape[0]
                     p_idx=np.vstack((p_idx,vertice_num+np.arange(new_pt_num)))
                     vertice_num+=new_pt_num
+                    new_pt_nb_list.append(new_pt_nb)
+                    
                 
                 
                 p_edge, adj, face = extract_face(face, p_idx,mar_pt,mar_nb)
                 mask = build_mask(vertice_num, p_idx)
 
-                
-                
                 
                 x_list[c].append(x)
                 adj_list[c].append(adj)
@@ -68,12 +71,13 @@ def get_training_data(root_path, load_previous=True):
     Y = np.array(y_list)
     Ynm = np.array(y_nm_list)
     Mask = np.array(mask_list)
+    UnpoolIdx=np.array(new_pt_nb_list)
     
     if not load_previous:
         np.savez(load_path, X=X, Adj=Adj, Pidx=Pidx, Pedge=Pedge,
                  Y=Y, Ynm=Ynm, Mask=Mask)
     
-    return X, Adj, Pidx, Pedge, Y, Ynm, Mask
+    return X, Adj, Pidx, Pedge, Y, Ynm, Mask,UnpoolIdx
 
     
 
@@ -91,13 +95,15 @@ def gather_from_one(x, idx):
     x = x[idx]
     return x
 
-def get_p_face_id(x_hole, face_hole, x_p, face_p):
-    face_coord1=np.sort(x_hole[face_hole].reshape([-1, 9]), axis=-1) #[n,9]
-    face_coord2=np.sort(x_p[face_p].reshape([-1, 9]), axis=-1) #[m,9] m>n
+def fill_face_id(x_fill, face_fill,x_hole, face_hole ):
+    
+    
+    face_coord1=np.sort(x_hole[face_hole-1].reshape([-1, 9]), axis=-1) #[n,9]
+    face_coord2=np.sort(x_fill[face_fill-1].reshape([-1, 9]), axis=-1) #[m,9] m>n
     face_coord=np.vstack((face_coord1,face_coord2))
     unique, inverse = grouping.unique_rows(face_coord)
     hole_size=face_coord1.shape[0]
-    p_face_idx=np.where(inverse[hole_size:]<hole_size)
+    p_face_idx=np.where(inverse[hole_size:]>=hole_size)[0]
     return p_face_idx
     
 def subdivide(vertice_num,
@@ -187,8 +193,8 @@ def extract_face(faces, p_idx, mar_pt=None, mar_nb=None):
     #edge-->adj
     #[f,3,2]
     edges = np.stack([faces[:, g]
-                      for g in [[0, 1], [1, 0],
-                                [1, 2]]],axis=1)
+                      for g in [[0, 1], [1, 2],
+                                [2,0]]],axis=1)
     if mar_pt is not None:
 
         #[f(x) if condition else g(x) for x in sequence]
@@ -222,23 +228,25 @@ def extract_face(faces, p_idx, mar_pt=None, mar_nb=None):
         
         # [2*m,3,2]
         split_edges = np.stack([split_faces[:, g]
-                          for g in [[0, 1], [1, 0],
-                                    [1, 2]]],axis=1)
+                          for g in [[0, 1], [1, 2],
+                                    [2, 0]]],axis=1)
         edges=np.concatenate([edges,split_edges]) #[f+2m,3,2]
 
     edges=edges.reshape([-1,2])
-    unique, inverse = grouping.unique_rows(edges)
-    edges = edges[unique]
-    edges_sym=edges[:,[1,0]]
-    edges=np.concatenate([edges,edges_sym])
+    # unique, inverse = grouping.unique_rows(edges)
+    # edges = edges[unique]
+    # edges_sym=edges[:,[1,0]]
+    # edges=np.concatenate([edges,edges_sym])
     edges = edges[np.argsort(edges[:, 0])]
     
     unique, inverse = grouping.unique_rows(edges[:, 0])
     
-    p_unique=unique[p_idx-1]
+    st_unique=unique[p_idx-1]
+    ed_unique=unique[p_idx]
+    
     p_edges=np.vstack([edges[st:ed]
-           for st, ed in zip(p_unique[:-1], p_unique[1:])])
-    adj = [np.concatenate([edges[:, 1][st:ed], np.zeros([10 - (ed - st)])])
+           for st, ed in zip(st_unique, ed_unique)])
+    adj = [np.concatenate([edges[:, 1][st:ed], np.zeros([14 - (ed - st)])]).astype(np.int32)  #TODO 10 20 ?
            for st, ed in zip(unique[:-1], unique[1:])]
     adj = np.stack(adj)
     
@@ -282,9 +290,9 @@ def output(annotation_path):
 
 
 if __name__ == '__main__':
-    train_data_path = 'F:/ProjectData/surface/leg/train'
+    train_data_path = 'F:/ProjectData/surface/subdivide'
     
-    x, adj, pidx, pedge, y, ynm, mask = \
+    x, adj, pidx, pedge, y, ynm, mask,unpool_idx = \
         get_training_data(train_data_path,load_previous=False)
     
     # output(annotation_path)
