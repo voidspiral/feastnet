@@ -3,7 +3,7 @@ import numpy as np
 from src.data_process import get_training_data
 from src.model import get_model_fill
 
-data_path = 'F:/ProjectData/surface/new'
+data_path = 'F:/ProjectData/surface/leg/test'
 # [ coarse_total_size,3]
 X = tf.placeholder(tf.float32, shape=[None, 3])
 # [ coarse_total_size,10]
@@ -25,10 +25,10 @@ config.gpu_options.allow_growth = True
 with tf.Session(config=config)as sess:
     sess.run(tf.global_variables_initializer())
     ckpt_path = 'F:/tf_projects/3D/FeaStNet-master/ckpt'
-    dir_save='/20190424-1647'
+    dir_save='/20190425-1917'
     save_checkpoints_dir = ckpt_path + '/' + dir_save
 
-    var_file = save_checkpoints_dir+'/model.ckpt-835'
+    var_file = save_checkpoints_dir+'/model.ckpt-7520'
     saver.restore(sess, var_file)  # 从模型中恢复最新变量
     x, x_adj, x_add_idx, x_add_edge, y, y_nm,mask = get_training_data(data_path,load_previous=False)
 

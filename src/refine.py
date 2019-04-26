@@ -42,12 +42,12 @@ total_loss = mesh_loss +  lap_loss
 
 optimizer = tf.train.AdamOptimizer(0.001).minimize(total_loss)
 
-train_data_path = 'F:/ProjectData/surface/leg'
+train_data_path = 'F:/ProjectData/surface/leg/train'
 ckpt_path = 'F:/tf_projects/3D/FeaStNet-master/ckpt'
 x, adj, pidx, pedge, y, ynm, mask = \
     get_training_data(train_data_path, load_previous=True)
 
-valid_data_path = 'F:/ProjectData/surface/leg'
+valid_data_path = 'F:/ProjectData/surface/leg/valid'
 x_v, adj_v, pidx_v, pedge_v, y_v, ynm_v, mask_v = \
     get_training_data(valid_data_path, load_previous=True)
 
@@ -120,12 +120,12 @@ with tf.Session(config=config)as sess:
 
             
 
-        if epoch % 1 == 0:
+        if epoch % 10 == 0:
             if avg_loss_v['loss'] < min_loss:
                 min_loss = avg_loss_v['loss']
                 print('save ckpt\n')
                 saver.save(sess, save_checkpoints_dir + "/model.ckpt", global_step=int(epoch))
-            if epoch % 30 == 0:
+            if epoch % 200 == 0:
                 print('save ckpt\n')
                 saver.save(sess, save_checkpoints_dir + "/model.ckpt", global_step=int(epoch))
 
