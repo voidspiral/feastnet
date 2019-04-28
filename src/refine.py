@@ -53,11 +53,11 @@ x_v, adj_v, pidx_v, pedge_v, y_v, ynm_v, mask_v = \
 
 # x, adj, pidx,pedge, y, ynm,mask=get_training_data(annotation_path)
 
-# dir_load = '20190418-1138'  # where to restore the model
-dir_load =None
-model_name = 'model.ckpt-430'
+dir_load = '20190426-2322'  # where to restore the model
+# dir_load =None
+model_name = 'model.ckpt-4'
 
-saver = tf.train.Saver()
+saver = tf.train.Saver(max_to_keep=10)
 
 dir_save = datetime.now().strftime("%Y%m%d-%H%M")
 save_checkpoints_dir = ckpt_path + '/' + dir_save
@@ -120,14 +120,14 @@ with tf.Session(config=config)as sess:
 
             
 
-        if epoch % 10 == 0:
+        if epoch % 20 == 0:
             if avg_loss_v['loss'] < min_loss:
                 min_loss = avg_loss_v['loss']
                 print('save ckpt\n')
                 saver.save(sess, save_checkpoints_dir + "/model.ckpt", global_step=int(epoch))
-            if epoch % 200 == 0:
+            if epoch % 5000 == 0:
                 print('save ckpt\n')
-                saver.save(sess, save_checkpoints_dir + "/model.ckpt", global_step=int(epoch))
+                saver.save(sess, save_checkpoints_dir + "/model.ckpt", global_step=int(epoch/1000))
 
             print('TRAIN_SUMMARY:\n')
             print('epoch = %d \nloss=%.4f\nChamfer_loss=%.4f\nedge_loss=%.4f\nnormal_loss=%.4f\nlap_loss=%.4f\n'
