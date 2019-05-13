@@ -127,7 +127,7 @@ with tf.Session(config=config)as sess:
                 saver.save(sess, save_checkpoints_dir + "/model.ckpt", global_step=int(epoch))
             if epoch % 5000 == 0:
                 print('save ckpt\n')
-                saver.save(sess, save_checkpoints_dir + "/model.ckpt", global_step=int(epoch/1000))
+                saver.save(sess, save_checkpoints_dir + "/model_thsd.ckpt", global_step=int(epoch/1000))
 
             print('TRAIN_SUMMARY:\n')
             print('epoch = %d \nloss=%.4f\nChamfer_loss=%.4f\nedge_loss=%.4f\nnormal_loss=%.4f\nlap_loss=%.4f\n'
