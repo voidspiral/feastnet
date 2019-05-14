@@ -16,17 +16,20 @@ X_adj = tf.placeholder(tf.int32, shape=[None, 10])
 output = get_model_fill(X,  X_adj)
 saver = tf.train.Saver()
 
-NUM_PARALLEL_EXEC_UNITS=4
-config = tf.ConfigProto(intra_op_parallelism_threads=NUM_PARALLEL_EXEC_UNITS,
-                        inter_op_parallelism_threads=2,
-                        allow_soft_placement=True,
-                        device_count = {'CPU': NUM_PARALLEL_EXEC_UNITS})
+# NUM_PARALLEL_EXEC_UNITS=4
+# config = tf.ConfigProto(intra_op_parallelism_threads=NUM_PARALLEL_EXEC_UNITS,
+#                         inter_op_parallelism_threads=2,
+#                         allow_soft_placement=True,
+#                         device_count = {'CPU': NUM_PARALLEL_EXEC_UNITS})
+#
+# os.environ["OMP_NUM_THREADS"] = "NUM_PARALLEL_EXEC_UNITS"
+# os.environ["KMP_BLOCKTIME"] = "0"
+# os.environ["KMP_SETTINGS"] = "1"
+# os.environ["KMP_AFFINITY"]= "granularity=fine,verbose,compact,1,0"
 
-os.environ["OMP_NUM_THREADS"] = "NUM_PARALLEL_EXEC_UNITS"
-os.environ["KMP_BLOCKTIME"] = "0"
-os.environ["KMP_SETTINGS"] = "1"
-os.environ["KMP_AFFINITY"]= "granularity=fine,verbose,compact,1,0"
 
+config = tf.ConfigProto()
+config.gpu_options.allow_growth = True
 with tf.Session(config=config)as sess:
     sess.run(tf.global_variables_initializer())
     ckpt_path = 'F:/tf_projects/3D/FeaStNet-master/ckpt'

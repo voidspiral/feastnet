@@ -76,19 +76,19 @@ with tf.gfile.GFile(output_optimized_graph_name, 'rb') as f:
    graph_def_optimized = tf.GraphDef()
    graph_def_optimized.ParseFromString(f.read())
 
-NUM_PARALLEL_EXEC_UNITS=4
-config = tf.ConfigProto(intra_op_parallelism_threads=NUM_PARALLEL_EXEC_UNITS,
-                        inter_op_parallelism_threads=2,
-                        allow_soft_placement=True,
-                        device_count = {'CPU': NUM_PARALLEL_EXEC_UNITS})
-
-os.environ["OMP_NUM_THREADS"] = "NUM_PARALLEL_EXEC_UNITS"
-os.environ["KMP_BLOCKTIME"] = "0"
-os.environ["KMP_SETTINGS"] = "1"
-os.environ["KMP_AFFINITY"]= "granularity=fine,verbose,compact,1,0"
+# NUM_PARALLEL_EXEC_UNITS=4
+# config = tf.ConfigProto(intra_op_parallelism_threads=NUM_PARALLEL_EXEC_UNITS,
+#                         inter_op_parallelism_threads=2,
+#                         allow_soft_placement=True,
+#                         device_count = {'CPU': NUM_PARALLEL_EXEC_UNITS})
+#
+# os.environ["OMP_NUM_THREADS"] = "NUM_PARALLEL_EXEC_UNITS"
+# os.environ["KMP_BLOCKTIME"] = "0"
+# os.environ["KMP_SETTINGS"] = "1"
+# os.environ["KMP_AFFINITY"]= "granularity=fine,verbose,compact,1,0"
 
 G = tf.Graph()
-with tf.Session(graph=G,config=config) as sess:
+with tf.Session(graph=G) as sess:
     output = tf.import_graph_def(graph_def_optimized, return_elements=['output:0'])
     # print('Operations in Optimized Graph:')
     # print([op.name for op in G.get_operations()])
