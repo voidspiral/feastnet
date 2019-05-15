@@ -42,7 +42,7 @@ def get_training_data(root_path, load_previous=True):
                 vertice_num=x.shape[0]
                 if i>0:
                     
-                    face, face_idx, new_pt_nb,mar_pt, mar_nb\
+                    face, p_face_idx, new_pt_nb,mar_pt, mar_nb\
                         =subdivide(vertice_num,face,p_face_idx)
                     
                     new_pt_num=new_pt_nb.shape[0]
@@ -97,13 +97,14 @@ def gather_from_one(x, idx):
 
 def fill_face_id(x_fill, face_fill,x_hole, face_hole ):
     
-    
     face_coord1=np.sort(x_hole[face_hole-1].reshape([-1, 9]), axis=-1) #[n,9]
     face_coord2=np.sort(x_fill[face_fill-1].reshape([-1, 9]), axis=-1) #[m,9] m>n
     face_coord=np.vstack((face_coord1,face_coord2))
-    unique, inverse = grouping.unique_rows(face_coord)
+    unique, inverse = grouping.unique_rows(face_coord) #TODO
+    
+    unique=np.sort(unique)
     hole_size=face_coord1.shape[0]
-    p_face_idx=np.where(inverse[hole_size:]>=hole_size)[0]
+    p_face_idx =unique[hole_size:]-hole_size
     return p_face_idx
     
 def subdivide(vertice_num,
@@ -122,24 +123,23 @@ def subdivide(vertice_num,
     mid= np.vstack([faces[:,e]for e in [[0, 1],
                                [1, 2],
                                [2, 0]]])
+    mid_ivs=mid[:,[1,0]]
+    bi_mid=np.vstack([mid,mid_ivs])
 
 
     # 新增点为 len(unique)=num_edge 个。  mid[unique] 就是所有新增点,
     # 新增点的id: vertice_num ~ vertice_num+len(unique)
     # [num_edge] [3*f]. unique 的每个值代表一个不重复的新中点在所有中点中的索引
-    unique, inverse = grouping.unique_rows(mid)
-    idx=np.array([id for id, v in Counter(inverse).items() if v==1])
-    new_pt_nb=mid[unique]
-    mar_pt=idx+vertice_num # 边缘点的 id [mar_num]
-    mar_nb=mid[unique[idx]] #[mar_num,2]
+    unique, inverse = grouping.unique_rows(bi_mid)
+    mar_in_mid=np.sort(unique[mid.shape[0]:])-mid.shape[0]
+    mar_nb=mid[mar_in_mid]
     
-    # [f,3]  3 column means 3 kinds of middle points [01] [12] [20]
-    # which is duplicated in two adjacency triangles
-    mid_idx = (np.arange(len(face_idx) * 3)).reshape((3, -1)).T
+    
+    mar_pt=mar_in_mid+vertice_num # 边缘点的 id [mar_num]
+    
+    # [f,3]  3 column means if of 3 kinds of middle points [01] [12] [20]
+    mid_idx = (np.arange(len(face_idx) * 3)).reshape((3, -1)).T+ vertice_num
 
-
-    # [f,3] 新face关于 新点的索引
-    mid_idx = inverse[mid_idx] + vertice_num
 
     # the new faces with correct winding
     # [4*f,3]
@@ -161,7 +161,7 @@ def subdivide(vertice_num,
     # replace the old face with a smaller face
     new_face[face_idx] = small_faces[:len(face_idx)]
     new_face_idx=np.concatenate([face_idx, np.arange(len(face_idx), 4 * len(face_idx))])
-    return  new_face,new_face_idx,new_pt_nb,mar_pt,mar_nb
+    return  new_face,new_face_idx,mid,mar_pt,mar_nb
 
 # def extract_edge(p_idx, p_adj):
 #     '''
