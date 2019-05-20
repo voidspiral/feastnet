@@ -11,7 +11,7 @@ from matplotlib import pyplot as plt
 from imageio import imwrite
 from tensorflow.contrib.learn.python.learn.datasets.mnist import read_data_sets
 
-from src.model import custom_lin, custom_conv2d
+from src.model import custom_lin, conv3d
 
 sns.set_style('whitegrid')
 
@@ -58,13 +58,13 @@ def inference_network(x, adj,latent_dim, is_training):
     # Conv1
     M_conv1 = 9
     # [batch_size, input_size, out]
-    h_conv1 = tf.nn.relu(custom_conv2d(h_fc0, adj, 32, M_conv1,True,is_training))
+    h_conv1 = tf.nn.relu(conv3d(h_fc0, adj, 32, M_conv1, True, is_training))
     # Conv2
     M_conv2 = 9
-    h_conv2 = tf.nn.relu(custom_conv2d(h_conv1, adj, 64, M_conv2,True,is_training))
+    h_conv2 = tf.nn.relu(conv3d(h_conv1, adj, 64, M_conv2, True, is_training))
     # Conv3
     M_conv3 = 9
-    h_conv3 = tf.nn.relu(custom_conv2d(h_conv2, adj, 128, M_conv3,False))
+    h_conv3 = tf.nn.relu(conv3d(h_conv2, adj, 128, M_conv3, False))
     mean_pool=tf.reduce_mean(h_conv3,axis=2)
     gaussian_params = slim.fully_connected(
       mean_pool, latent_dim * 2, activation_fn=None)

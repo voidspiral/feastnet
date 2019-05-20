@@ -1,10 +1,5 @@
 from __future__ import division
 import tensorflow as tf
-import numpy as np
-import math
-import time
-import h5py
-
 # from src.train import  COARSEN_LEVEL
 from tensorflow.contrib import slim
 
@@ -155,8 +150,8 @@ def get_patches_2(x, adj):
     return patches
 
 
-def custom_conv2d(x, adj, out_channels, M, ring,
-                  translation_invariance=True, scope=''):
+def conv3d(x, adj, out_channels, M, ring=1,
+           translation_invariance=True, scope=''):
     if translation_invariance == True:
         with tf.variable_scope(scope):
             print("Translation-invariant\n")
@@ -250,7 +245,7 @@ def custom_conv2d(x, adj, out_channels, M, ring,
         return patches
 
 
-def custom_lin(input, out_channels, scope):
+def custom_lin(input, out_channels, scope='linear'):
     # 可以理解为升降维 1x1 Conv, 只对input最后一维进行 全连接
     with tf.variable_scope(scope):
         input_size, in_channels = input.get_shape().as_list()
@@ -273,19 +268,17 @@ def perm_data(input, indices):
     Permute data matrix, i.e. exchange node ids,
     so that binary unions form the clustering tree.
     new x can be used for pooling
+    :param input:  M,channel
+    :param indices: Mnew
+    :return: Mnew, channel
     """
     
-    M, channel = input.shape
+    M, channel = tf.shape(input)
     Mnew = tf.shape(indices)[0]
-    
-    xnew = tf.zeros((Mnew, channel))
-    
-    def loop_body(i):
-        if i < M:
-            xnew[i] = input[indices[i]]
-    
-    xnew = tf.while_loop(lambda i, *args: i < Mnew, loop_body, [xnew])
-    return xnew
+    fake_node=tf.zeros([Mnew-M,channel],dtype=tf.float32)
+    sample_array=tf.concat([input,fake_node],axis=0) #[Mnew,channel]
+    perm_data=tf.gather(sample_array,indices)
+    return perm_data
 
 
 def get_model_fill(x, adj):
@@ -300,14 +293,14 @@ def get_model_fill(x, adj):
     h_dims = [16, 16, 32, 64, 64, 128]
     
     for dim in h_dims:
-        x = tf.nn.relu(custom_conv2d(x, adj, dim, M=9, ring=1, scope='conv1'))
-    y_conv = custom_conv2d(x, adj, 3, M=9, ring=1, scope='conv4')
+        x = tf.nn.relu(conv3d(x, adj, dim, M=9, ring=1, scope='conv1'))
+    y_conv = conv3d(x, adj, 3, M=9, ring=1, scope='conv4')
     return y_conv
 
 
 def model_cascade(x, adj):
     x = slim.repeat(x, 7, block16, scale=0.17, adj=adj)
-    output1 = custom_conv2d(x, adj, 3, M=9, ring=1, scope='output')
+    output1 = conv3d(x, adj, 3, M=9, ring=1, scope='output')
 
 
 def get_model_res(x, adj):
@@ -317,7 +310,7 @@ def get_model_res(x, adj):
 
     0 - input(3) - LIN(16) - CONV(32) - CONV(64) - CONV(128) - LIN(1024) - Output(50)
     """
-    x = tf.nn.relu(custom_conv2d(x, adj, 32, M=9, ring=1, scope='conv1'))
+    x = tf.nn.relu(conv3d(x, adj, 32, M=9, ring=1, scope='conv1'))
     
     return y_conv, x
 
@@ -329,13 +322,13 @@ def block16(net, adj, scale=1.0, scope=None, reuse=None):
             b1 = tf.nn.relu(custom_lin(net, 32, scope='lin1'))
         with tf.variable_scope('Branch_1'):
             x = tf.nn.relu(custom_lin(net, 32, scope='lin2'))
-            b2 = tf.nn.relu(custom_conv2d(x, adj, 48, M=9, ring=1, scope='conv2'))
+            b2 = tf.nn.relu(conv3d(x, adj, 48, M=9, ring=1, scope='conv2'))
         with tf.variable_scope('Branch_2'):
             x = tf.nn.relu(custom_lin(net, 32, scope='lin3'))
-            x = tf.nn.relu(custom_conv2d(x, adj, 48, M=9, ring=1, scope='conv31'))
-            b3 = tf.nn.relu(custom_conv2d(x, adj, 64, M=9, ring=1, scope='conv32'))
+            x = tf.nn.relu(conv3d(x, adj, 48, M=9, ring=1, scope='conv31'))
+            b3 = tf.nn.relu(conv3d(x, adj, 64, M=9, ring=1, scope='conv32'))
         mixed = tf.concat(axis=1, values=[b1, b2, b3])
-        up = custom_conv2d(mixed, adj, 32, M=9, ring=1, scope='conv4')
+        up = conv3d(mixed, adj, 32, M=9, ring=1, scope='conv4')
         scaled_up = up * scale
         scaled_up = tf.clip_by_value(scaled_up, -6.0, 6.0)
         
@@ -358,15 +351,15 @@ def get_model_original(x, adj, num_classes):
     M_conv1 = 9
     out_channels_conv1 = 32
     # [batch_size, input_size, out]
-    h_conv1 = tf.nn.relu(custom_conv2d(h_fc0, adj, out_channels_conv1, M_conv1))
+    h_conv1 = tf.nn.relu(conv3d(h_fc0, adj, out_channels_conv1, M_conv1))
     # Conv2
     M_conv2 = 9
     out_channels_conv2 = 64
-    h_conv2 = tf.nn.relu(custom_conv2d(h_conv1, adj, out_channels_conv2, M_conv2))
+    h_conv2 = tf.nn.relu(conv3d(h_conv1, adj, out_channels_conv2, M_conv2))
     # Conv3
     M_conv3 = 9
     out_channels_conv3 = 128
-    h_conv3 = tf.nn.relu(custom_conv2d(h_conv2, adj, out_channels_conv3, M_conv3))
+    h_conv3 = tf.nn.relu(conv3d(h_conv2, adj, out_channels_conv3, M_conv3))
     # Lin(1024)
     out_channels_fc1 = 1024
     h_fc1 = tf.nn.relu(custom_lin(h_conv3, out_channels_fc1))
@@ -378,30 +371,28 @@ def get_model_original(x, adj, num_classes):
 COARSEN_LEVEL = 2
 
 
-def get_model(x, adj, perms, num_classes, architecture):
-    """
-    0 - input(3) - LIN(16) - CONV(32) - CONV(64) - CONV(128) - LIN(1024) - Output(50)
-    """
-    out_channels_fc0 = 16
-    fc0 = tf.nn.relu(custom_lin(x[0], out_channels_fc0))
-    # Conv1
-    M_conv1 = 9
-    out_channels_conv1 = 32
-    conv1 = tf.nn.relu(custom_conv2d(fc0, adj[0], out_channels_conv1, M_conv1))
-    # Conv2
-    M_conv2 = 9
-    out_channels_conv2 = 64
-    # [batch_size, input_size, out]
-    conv2 = tf.nn.relu(custom_conv2d(conv1, adj[0], out_channels_conv2, M_conv2))
-    conv2 = perm_data(conv2, perms[0])
+def get_model(input, adjs, perms,is_training,channels,num_classes):
+    '''
     
-    # Conv3
-    M_conv3 = 9
-    out_channels_conv3 = 128
-    conv3 = tf.nn.relu(custom_conv2d(conv2, adj[1], out_channels_conv3, M_conv3))
-    # Lin(1024)
-    out_channels_fc1 = 1024
-    fc1 = tf.nn.relu(custom_lin(conv3, out_channels_fc1))
-    # Lin(num_classes)
-    y = custom_lin(fc1, num_classes)
+    :param net: [input_size,3]
+    :param adj: [input_size,K]
+    :param perms:
+    :param num_classes:
+    :return:
+    '''
+    
+    def block(net,idx,ch_in,ch_out):
+        net = tf.nn.relu(conv3d(net, adjs[idx], ch_in, 9))
+        net = tf.nn.relu(conv3d(net, adjs[idx], ch_out, 9))
+        net = perm_data(net, perms[idx])
+        net = tf.layers.max_pooling1d(net, pool_size=2, strides=2)
+        return net
+    net=input
+    for idx,(ch_in,ch_out) in enumerate(zip(channels[:-1],channels[1:])): #6
+        net=block(net,idx,ch_in,ch_out)
+        
+    net=tf.reduce_mean(net,axis=0) #[512]
+    net=slim.dropout(net,is_training=is_training)
+    y=slim.fully_connected(net,num_classes,activation_fn=None)
+
     return y

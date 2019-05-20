@@ -6,12 +6,15 @@ def coarsen(A,x, levels, self_connections=False):
     """
     Coarsen a graph, represented by its adjacency matrix A, at multiple
     levels.
+    A: 按 id 升序排列的 adjacency matrix
+    levels: 压缩 2**levels 倍
     """
-    # graph: weights between nodes of coarser(parent) layer
-    # parent:finer_layer_id -> coarser_layer_id
+    # graph: graph[i] 的 index 代表本层cluster 的 id(形成的顺序)
+    # e.g.  graph[i][0,n]代表最先形成的cluster到第n个形成的cluster之间的连接
+    # parents:下层id到上层id之间的映射。id是本层cluster形成的顺序
     graphs, parents = metis(A, levels)
     # 根据最顶层id升序，返回自底向上的id二叉树，二叉树的结构定义了层间连接关系
-    # perm 和 graph 数量相等，比parent多一个
+    #
     perms = compute_perm(parents)
     xnew=perm_data(x, perms[0])
     Anew=graphs[-1]
@@ -22,8 +25,7 @@ def coarsen(A,x, levels, self_connections=False):
     Anew=perm_adjacency(Anew, perms[-1])
     Anew = Anew.tocsr()
     Anew.eliminate_zeros()
-
-    return perms[0], Anew
+    return perms[0], Anew, xnew
 
 
 def metis(W, levels, rid=None):
@@ -70,7 +72,7 @@ def metis(W, levels, rid=None):
 
         # PAIR THE VERTICES AND CONSTRUCT THE ROOT VECTOR
         idx_row, idx_col, val = scipy.sparse.find(W)
-        # 两个顺序：1.生成顺序，即本层id； 2.基于本层id 的 degree 顺序。二者共同决定下一层 id
+        # 两个顺序：1.本层点的生成顺序，即本层id； 2.基于本层id 的 degree 顺序。二者共同决定下一层 id
         # 按照本层 id 排序。在这个基准上使用上一轮得到的degree increased rid 进行索引，
         # 先聚合 degree 小的点
         perm = np.argsort(idx_row)
@@ -78,7 +80,7 @@ def metis(W, levels, rid=None):
         cc = idx_col[perm]
         vv = val[perm]
         # 为每个不孤立的点分配cluster, 一共有 len(rid) 个点，len(cluster_id)=len(rid)
-        # 每个 adjoint 的起点对应的 cluster id , 由该 adjoint 被 cluster 的优先级
+        # 每个 vertix 的起点对应的 cluster id , 由该 vertix 被 cluster 的优先级
         # 决定，没啥意义，单纯的id
         cluster_id = metis_one_level(rr,cc,vv,rid,weights)  # rr is ordered
         parents.append(cluster_id)
@@ -91,23 +93,23 @@ def metis(W, levels, rid=None):
         #nd_sz{count+1}=supernode_size;
 
         # COMPUTE THE EDGES WEIGHTS FOR THE NEW GRAPH
-        # 每个 adjoint 的起点所属的 cluster id , 由该 adjoint 被 cluster 的优先级决定
-        nrr = cluster_id[rr] # [num of adjoint]
-        # 求每个 adjoint 的终点对应的 cluster id , 由该 adjoint 被 cluster 的优先级决定
-        ncc = cluster_id[cc] #[num of adjoint]
-        nvv = vv  # 每个 adjoint 的 weight
+        # 每个起点 vertix 所属的 cluster id , 由该 vertix 被 cluster 的优先级决定
+        nrr = cluster_id[rr] # [num of vertix]
+        # 求每个终点 vertix 对应的 cluster id , 由该 vertix 被 cluster 的优先级决定
+        ncc = cluster_id[cc] #[num of vertix]
+        nvv = vv  # 每个 cluster 的 weight
         Nnew = cluster_id.max() + 1  # 一共多少 cluster
         # CSR is more appropriate: row,val pairs appear multiple times
         # cluster 的两两组合 作为新的 pair , 创建新的 邻接矩阵
         # 有层间父子id映射 claster_id，和父层的拓扑关系 W, W中 weight越大表示节点连接关系的越强，能够
         # 指导下一次cluster
         # scipy adds the values of the duplicate entries:  merge weights of cluster
-        # W 的 index 代表new cluster 的 id
+        # W 的 index 代表new cluster 的 id(形成的优先性)
+        # e.g.  W[0,n]代表最先形成的cluster到第n个形成的cluster之间的连接
         W = scipy.sparse.csr_matrix((nvv,(nrr,ncc)), shape=(Nnew,Nnew))
         W.eliminate_zeros() # 稀疏
         # Add new graph to the list of all coarsened graphs
         graphs.append(W)
-        N, N = W.shape
 
         # COMPUTE THE DEGREE (OMIT OR NOT SELF LOOPS) 忽略自环，weight变小，该点更容易被团结。
         # 但是如果该点已经是团结过好几次的了，那么应该减小它被继续团结的可能，否则会产生吸收黑洞，
@@ -210,17 +212,21 @@ def compute_perm(parents):
 
             # Add a node to go with a singelton.
             if len(indices_node) is 1:
+                # 本层是独生子
                 indices_node.append(pool_singeltons)
                 pool_singeltons += 1
                 #print('new singelton: {}'.format(indices_node))
             # Add two nodes as children of a singelton in the parent.
             elif len(indices_node) is 0:
+                # parent是fake point
                 indices_node.append(pool_singeltons+0)
                 indices_node.append(pool_singeltons+1)
                 pool_singeltons += 2
                 #print('singelton childrens: {}'.format(indices_node))
 
             indices_layer.extend(indices_node) # 每次加两个元素：上一层的两个索引
+        # 将根据indices[-1](coarser layer)节点顺序推导出的 indices_layer(finer layer)
+        # 放入 indices。 因此 indices 中包含的由 coarser 到 finer 的层节点索引
         indices.append(indices_layer)
 
     # Sanity checks.
@@ -238,10 +244,11 @@ assert (compute_perm([np.array([4,1,1,2,2,3,0,0,3]),np.array([2,1,0,1,0])])
 
 def perm_data(x, indices):
     """
-    排列成待卷积的序列
+    排列成待卷积的序列,并插入 fake nodes
     Permute data matrix, i.e. exchange node ids,
     so that binary unions form the clustering tree.
     new x can be used for pooling
+    :return xnew
     """
     if indices is None:
         return x
@@ -263,6 +270,8 @@ def perm_data(x, indices):
 
 def perm_adjacency(A, indices):
     """
+    其他功能实现了从粗到细按照父子关系排列完各层的id，使得最粗层id为升序，
+    本函数将原本根据本层id索引的A转换成满足上层id为顺序的A
     indices 是为了组成使最顶层id为升序的二叉树，本层的id的顺序
     Permute adjacency matrix, i.e. exchange node ids,
     so that binary unions form the clustering tree.
@@ -281,6 +290,7 @@ def perm_adjacency(A, indices):
 
     # Add Mnew - M isolated vertices.
     if Mnew > M:
+        # 将[M,M]补0得到[Mnew,Mnew]
         rows = scipy.sparse.coo_matrix((Mnew-M,    M), dtype=np.float32)
         cols = scipy.sparse.coo_matrix((Mnew, Mnew-M), dtype=np.float32)
         A = scipy.sparse.vstack([A, rows])
